@@ -189,11 +189,9 @@ export default function ReferralPortal({ currentLang, currentUser, setActiveModu
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Receiving Hospital (Specialized Care)</label>
-                  <select value={receivingHospitalId} onChange={(e) => setReceivingHospitalId(e.target.value)}>
-                    {hospitals.map((h) => (
-                      <option key={h.id} value={h.id}>{h.name} ({h.level})</option>
-                    ))}
+                  <label>{isAm ? 'ተቀባይ ሆስፒታል (ብቸኛ ተቀባይ ማዕከል)' : 'Receiving Hospital (Exclusive Acceptance Hub)'}</label>
+                  <select value="HOSP-001" disabled style={{ background: '#eef2f7', fontWeight: 600, color: '#0f3b5e', cursor: 'not-allowed' }}>
+                    <option value="HOSP-001">Zewditu Memorial Hospital (Exclusive Partner)</option>
                   </select>
                 </div>
               </div>
