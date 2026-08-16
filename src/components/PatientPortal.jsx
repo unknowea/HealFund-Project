@@ -1,8 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 
-export default function PatientPortal({ currentLang, currentUser, onOpenAuth, setActiveModule }) {
-  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'dashboard' | 'appointments' | 'files' | 'help'
+export default function PatientPortal({
+  currentLang,
+  currentUser,
+  onOpenAuth,
+  activeTab: propActiveTab,
+  setActiveTab: propSetActiveTab,
+  setActiveModule,
+}) {
+  const [internalTab, setInternalTab] = useState('home'); // 'home' | 'dashboard' | 'appointments' | 'files' | 'help'
+  const activeTab = propActiveTab || internalTab;
+  const setActiveTab = propSetActiveTab || setInternalTab;
   const [selectedSlot, setSelectedSlot] = useState('Today 4:30 PM');
   const [customTime, setCustomTime] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -108,31 +117,36 @@ export default function PatientPortal({ currentLang, currentUser, onOpenAuth, se
     setModalMessage(`Appointment confirmed for ${timeStr} at Zewditu Memorial Hospital!`);
   };
 
+  const handleRequestAgent = async () => {
+    const newMsg = {
+      id: `MSG-${Date.now()}`,
+      name: defaultUser.name || 'Patient',
+      contact: defaultUser.patientId ? `ID: ${defaultUser.patientId}` : 'Patient in Need',
+      category: 'Community Agent',
+      message: `Assistance request from ${defaultUser.name} (${defaultUser.patientId || 'Patient'}), located in ${defaultUser.location || 'Addis Ababa'}.`,
+      status: 'Unread',
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMsg),
+      });
+    } catch (e) {}
+
+    const stored = JSON.parse(localStorage.getItem('healfund_inbox_messages') || '[]');
+    localStorage.setItem('healfund_inbox_messages', JSON.stringify([newMsg, ...stored]));
+
+    setModalMessage(isAm ? 'የማህበረሰብ ወኪል ድጋፍ ጥያቄዎ ደርሷል! ወኪላችን በቅርቡ ያነጋግርዎታል።' : 'Community agent assistance request received! A representative will contact you shortly.');
+  };
+
   // Translations
   const isAm = currentLang === 'am';
 
   return (
     <div>
-      {/* Sub-navigation links inside Patient Module */}
-      <div className="subnav-links">
-        <button className={activeTab === 'home' ? 'active' : ''} onClick={() => setActiveTab('home')}>
-          <i className="fas fa-home"></i> {isAm ? 'መነሻ' : 'Home'}
-        </button>
-        <button className={activeTab === 'dashboard' ? 'active' : ''} onClick={() => setActiveTab('dashboard')}>
-          <i className="fas fa-tachometer-alt"></i> {isAm ? 'ዳሽቦርድ' : 'Dashboard'}
-        </button>
-        <button className={activeTab === 'appointments' ? 'active' : ''} onClick={() => setActiveTab('appointments')}>
-          <i className="fas fa-calendar-check"></i> {isAm ? 'ቀጠሮዎች' : 'Appointments'}{' '}
-          <span className="badge">{appointmentsList.length}</span>
-        </button>
-        <button className={activeTab === 'files' ? 'active' : ''} onClick={() => setActiveTab('files')}>
-          <i className="fas fa-file-medical"></i> {isAm ? 'ፋይሎች' : 'Files'}
-        </button>
-        <button className={activeTab === 'help' ? 'active' : ''} onClick={() => setActiveTab('help')}>
-          <i className="fas fa-question-circle"></i> {isAm ? 'እርዳታ' : 'Help'}
-        </button>
-      </div>
-
       {/* PAGE: HOME */}
       {activeTab === 'home' && (
         <div className="hero">
@@ -418,7 +432,7 @@ export default function PatientPortal({ currentLang, currentUser, onOpenAuth, se
                 <small>{isAm ? 'በፍጥነት እንመልሳለን' : "We'll reply quickly"}</small>
               </div>
             </div>
-            <button className="btn btn-success" onClick={() => setModalMessage('Community agent assistance request received! A representative will contact you shortly.')}>
+            <button className="btn btn-success" onClick={handleRequestAgent}>
               <i className="fas fa-paper-plane"></i> {isAm ? 'አሁን እርዳታ ጠይቅ' : 'Request Assistance Now'}
             </button>
           </div>

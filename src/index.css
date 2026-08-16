@@ -59,10 +59,10 @@ body {
 .module-tab {
   background: transparent;
   border: none;
-  padding: 8px 18px;
+  padding: 7px 14px;
   border-radius: 30px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13.5px;
   cursor: pointer;
   color: #4a5a6e;
   transition: all 0.2s ease;

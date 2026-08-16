@@ -222,4 +222,34 @@ export const dataStore = {
       role: 'Head of Department',
     },
   },
+
+  messages: [
+    {
+      id: 'MSG-1001',
+      name: 'Selamawit Desta',
+      contact: 'selam.desta@gmail.com',
+      category: 'Medical File Verification',
+      message: 'Hello, I uploaded my medical lab results and doctor certificate yesterday from Lideta clinic. Could you please check the verification status so I can confirm my referral appointment?',
+      status: 'Unread',
+      createdAt: '2026-08-15T09:20:00Z',
+    },
+    {
+      id: 'MSG-1002',
+      name: 'Kassahun Belay',
+      contact: 'kassahun.b@ethionet.et',
+      category: 'Hospital Referral',
+      message: 'Inquiring about referral transfer timeline from Tikur Anbessa to Zewditu Memorial Hospital Cardiology clinic.',
+      status: 'Read',
+      createdAt: '2026-08-14T14:45:00Z',
+    },
+    {
+      id: 'MSG-1003',
+      name: 'Genet Wolde',
+      contact: 'genet.w@yahoo.com',
+      category: 'Community Agent',
+      message: 'My elderly mother cannot travel easily to the hospital or use a smartphone. We would appreciate a community health field agent visit in Lideta area.',
+      status: 'Unread',
+      createdAt: '2026-08-15T11:10:00Z',
+    },
+  ],
 };

@@ -120,8 +120,8 @@ app.post('/api/referrals', (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing required referral fields' });
   }
 
-  const sendingHosp = dataStore.hospitals.find((h) => h.id === sendingHospitalId) || { name: 'Referring Hospital' };
-  const receivingHosp = dataStore.hospitals.find((h) => h.id === receivingHospitalId) || { name: 'Zewditu Memorial Hospital' };
+  const sendingHosp = dataStore.hospitals.find((h) => h.id === sendingHospitalId) || { name: 'Referring Health Center' };
+  const receivingHosp = { id: 'HOSP-001', name: 'Zewditu Memorial Hospital' };
 
   const refNumber = String(dataStore.referrals.length + 453).padStart(5, '0');
   const newReferral = {
@@ -134,8 +134,8 @@ app.post('/api/referrals', (req, res) => {
     sendingHospitalId,
     sendingHospitalName: sendingHosp.name,
     sendingDoctor: req.body.sendingDoctor || 'Authorized Officer',
-    receivingHospitalId,
-    receivingHospitalName: receivingHosp.name,
+    receivingHospitalId: 'HOSP-001',
+    receivingHospitalName: 'Zewditu Memorial Hospital',
     department,
     urgency: urgency || 'Medium',
     reasonForReferral,
@@ -291,6 +291,55 @@ app.post('/api/files/upload', upload.single('medicalFile'), (req, res) => {
       status: 'Pending Verification',
     },
   });
+});
+
+// --- MESSAGES / ADMIN INBOX ---
+app.get('/api/messages', (req, res) => {
+  res.json({ success: true, messages: dataStore.messages || [] });
+});
+
+app.post('/api/messages', (req, res) => {
+  const { name, contact, category, message } = req.body;
+  if (!name || !message) {
+    return res.status(400).json({ success: false, message: 'Name and message are required' });
+  }
+
+  const msgNumber = String((dataStore.messages || []).length + 1001);
+  const newMessage = {
+    id: `MSG-${msgNumber}`,
+    name,
+    contact: contact || 'Anonymous / Not provided',
+    category: category || 'General Inquiry',
+    message,
+    status: 'Unread',
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!dataStore.messages) dataStore.messages = [];
+  dataStore.messages.unshift(newMessage);
+
+  res.json({ success: true, message: 'Message received successfully', data: newMessage });
+});
+
+app.put('/api/messages/:id/status', (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const msg = (dataStore.messages || []).find((m) => m.id === id);
+  if (!msg) {
+    return res.status(404).json({ success: false, message: 'Message not found' });
+  }
+  msg.status = status || 'Read';
+  res.json({ success: true, data: msg });
+});
+
+app.delete('/api/messages/:id', (req, res) => {
+  const { id } = req.params;
+  const index = (dataStore.messages || []).findIndex((m) => m.id === id);
+  if (index === -1) {
+    return res.status(404).json({ success: false, message: 'Message not found' });
+  }
+  const deleted = dataStore.messages.splice(index, 1);
+  res.json({ success: true, deleted: deleted[0] });
 });
 
 app.listen(PORT, () => {
