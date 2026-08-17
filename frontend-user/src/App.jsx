@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import AuthModal from './components/AuthModal';
 import PatientPortal from './components/PatientPortal';
@@ -13,7 +13,18 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
 
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const savedUser = localStorage.getItem('healfund_user');
+    const savedToken = localStorage.getItem('healfund_token');
+    if (savedUser && savedToken) {
+      setCurrentUser(JSON.parse(savedUser));
+    }
+  }, []);
+
   const handleLogout = () => {
+    localStorage.removeItem('healfund_token');
+    localStorage.removeItem('healfund_user');
     setCurrentUser(null);
     setActiveModule('home');
   };
@@ -40,12 +51,7 @@ export default function App() {
       <main>
         {isProtectedRoute && !currentUser ? (
           <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-            <div style={{
-              width: '64px', height: '64px', borderRadius: '50%',
-              background: '#e8f0fe', color: '#0f3b5e',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '28px', marginBottom: '16px',
-            }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#e8f0fe', color: '#0f3b5e', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', marginBottom: '16px' }}>
               <i className="fas fa-lock"></i>
             </div>
             <h2 style={{ color: '#0f3b5e', marginBottom: '8px' }}>
@@ -77,27 +83,15 @@ export default function App() {
                 setActiveModule={setActiveModule}
               />
             )}
-
             {activeModule === 'queue' && (
-              <QueuePortal
-                currentLang={currentLang}
-                currentUser={currentUser}
-              />
+              <QueuePortal currentLang={currentLang} currentUser={currentUser} />
             )}
           </>
         )}
 
-        {activeModule === 'financial' && (
-          <FinancialAssistancePortal currentLang={currentLang} />
-        )}
-
-        {activeModule === 'about' && (
-          <AboutUs currentLang={currentLang} />
-        )}
-
-        {activeModule === 'contact' && (
-          <ContactUs currentLang={currentLang} />
-        )}
+        {activeModule === 'financial' && <FinancialAssistancePortal currentLang={currentLang} />}
+        {activeModule === 'about' && <AboutUs currentLang={currentLang} />}
+        {activeModule === 'contact' && <ContactUs currentLang={currentLang} />}
       </main>
 
       <AuthModal
