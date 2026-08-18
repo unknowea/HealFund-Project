@@ -70,9 +70,26 @@ export default function App() {
       />
 
       <main>
-        {activeModule === 'inbox' && <AdminPortal currentLang={currentLang} currentUser={currentUser} />}
-        {activeModule === 'referrals' && <ReferralPortal currentLang={currentLang} currentUser={currentUser} setActiveModule={setActiveModule} />}
-        {activeModule === 'queue' && <QueuePortal currentLang={currentLang} currentUser={currentUser} />}
+        {/* inbox and messages both go to AdminPortal — it handles its own internal tab */}
+        {(activeModule === 'inbox' || activeModule === 'messages') && (
+          <AdminPortal
+            currentLang={currentLang}
+            currentUser={currentUser}
+            activeTab={activeModule}
+          />
+        )}
+
+        {activeModule === 'referrals' && (
+          <ReferralPortal
+            currentLang={currentLang}
+            currentUser={currentUser}
+            setActiveModule={setActiveModule}
+          />
+        )}
+
+        {activeModule === 'queue' && (
+          <QueuePortal currentLang={currentLang} currentUser={currentUser} />
+        )}
       </main>
 
       <footer className="footer-note">
