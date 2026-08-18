@@ -39,6 +39,14 @@ export default function Navbar({
           <i className="fas fa-stream"></i>
           <span>{currentLang === 'am' ? 'የታካሚ ተራ' : 'Patient Queue'}</span>
         </button>
+
+        <button
+          className={`module-tab ${activeModule === 'messages' ? 'active' : ''}`}
+          onClick={() => setActiveModule('messages')}
+        >
+          <i className="fas fa-comments"></i>
+          <span>{currentLang === 'am' ? 'መልዕክቶች' : 'Messages'}</span>
+        </button>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
