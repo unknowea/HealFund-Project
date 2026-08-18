@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import WhatsAppMessaging from './WhatsAppMessaging';
 
-export default function AdminPortal({ currentLang, currentUser }) {
+export default function AdminPortal({ currentLang, currentUser, activeTab: propActiveTab }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'unread' | 'read'
@@ -9,9 +10,17 @@ export default function AdminPortal({ currentLang, currentUser }) {
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [replySuccessMsg, setReplySuccessMsg] = useState('');
+  const [activeTab, setActiveTab] = useState(propActiveTab || 'inbox'); // 'inbox' | 'messaging'
 
   useEffect(() => {
     fetchMessages();
+
+    // Auto-refresh inbox every 5 seconds to show new messages in real-time
+    const refreshInterval = setInterval(() => {
+      fetchMessages();
+    }, 5000);
+
+    return () => clearInterval(refreshInterval);
   }, []);
 
   const defaultSampleMessages = [
@@ -187,7 +196,45 @@ export default function AdminPortal({ currentLang, currentUser }) {
         </div>
       </div>
 
-      {/* Admin Stat Cards */}
+      {/* Admin Tabs */}
+      <div style={{ display: 'flex', gap: '12px', borderBottom: '2px solid #e5e5e5', paddingBottom: '0' }}>
+        <button
+          onClick={() => setActiveTab('inbox')}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '16px 20px',
+            fontSize: '15px',
+            fontWeight: activeTab === 'inbox' ? 700 : 500,
+            color: activeTab === 'inbox' ? '#078930' : '#7a8a9e',
+            borderBottom: activeTab === 'inbox' ? '3px solid #078930' : 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+        >
+          <i className="fas fa-inbox"></i> {isAm ? 'መልዕክት ሳጥን' : 'Inbox'}
+        </button>
+        <button
+          onClick={() => setActiveTab('messaging')}
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: '16px 20px',
+            fontSize: '15px',
+            fontWeight: activeTab === 'messaging' ? 700 : 500,
+            color: activeTab === 'messaging' ? '#078930' : '#7a8a9e',
+            borderBottom: activeTab === 'messaging' ? '3px solid #078930' : 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+        >
+          <i className="fas fa-comments"></i> {isAm ? 'መልዕክቶች' : 'Messages'}
+        </button>
+      </div>
+
+      {activeTab === 'inbox' ? (
+        <>
+          {/* Admin Stat Cards */}
       <div className="stats-row" style={{ marginTop: 0 }}>
         <div className="stat-item" style={{ borderLeft: '4px solid #078930' }}>
           <h2 style={{ color: '#078930' }}>{unreadCount}</h2>
@@ -496,6 +543,12 @@ export default function AdminPortal({ currentLang, currentUser }) {
           )}
         </div>
       </div>
+        </>
+      ) : (
+        <div style={{ marginTop: '20px' }}>
+          <WhatsAppMessaging currentLang={currentLang} currentUser={currentUser} isAdmin={true} />
+        </div>
+      )}
     </div>
   );
 }
