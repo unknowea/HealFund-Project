@@ -98,13 +98,13 @@ export default function ReferralPortal({ currentLang, currentUser, setActiveModu
   return (
     <div>
       {/* Banner */}
-      <div className="card" style={{ background: 'linear-gradient(135deg, #0f3b5e 0%, #078930 100%)', color: '#fff' }}>
+      <div className="card" style={{ background: 'linear-gradient(135deg, #0d5a3d 0%, #078930 100%)', color: '#fff' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <h2 style={{ fontSize: '24px', marginBottom: '6px', color: '#fff' }}>
               <i className="fas fa-hospital-user"></i> {isAm ? 'ሆስፒታል ሪፈራል ኔትወርክ' : 'Hospital-to-Hospital Referral Network'}
             </h2>
-            <p style={{ color: '#e0f2fe', fontSize: '14px', maxWidth: '700px' }}>
+            <p style={{ color: '#d4f0e0', fontSize: '14px', maxWidth: '700px' }}>
               {isAm ? 'ኦፊሴላዊ ሪፈራል ማስተላለፊያ ሥርዓት።' : 'Official referral transmission system between verified health facilities.'}
             </p>
           </div>
@@ -131,8 +131,8 @@ export default function ReferralPortal({ currentLang, currentUser, setActiveModu
           </div>
           <form onSubmit={handleCreateReferral}>
             {/* Section 1: Hospitals */}
-            <div style={{ background: '#f8faff', padding: '20px', borderRadius: '14px', marginBottom: '20px' }}>
-              <h4 style={{ color: '#0f3b5e', marginBottom: '14px' }}><i className="fas fa-hospital"></i> 1. Referral Route</h4>
+            <div style={{ background: '#f4f9f6', padding: '20px', borderRadius: '14px', marginBottom: '20px' }}>
+              <h4 style={{ color: '#0d5a3d', marginBottom: '14px' }}><i className="fas fa-hospital"></i> 1. Referral Route</h4>
               <div className="form-grid-2">
                 <div className="form-group">
                   <label>Sending Hospital *</label>
@@ -142,7 +142,7 @@ export default function ReferralPortal({ currentLang, currentUser, setActiveModu
                 </div>
                 <div className="form-group">
                   <label>Receiving Hospital (Fixed)</label>
-                  <select disabled style={{ background: '#eef2f7', color: '#0f3b5e', fontWeight: 600, cursor: 'not-allowed' }}>
+                  <select disabled style={{ background: '#e8f4ec', color: '#0d5a3d', fontWeight: 600, cursor: 'not-allowed' }}>
                     <option>Zewditu Memorial Hospital (Exclusive Partner)</option>
                   </select>
                 </div>
@@ -150,8 +150,8 @@ export default function ReferralPortal({ currentLang, currentUser, setActiveModu
             </div>
 
             {/* Section 2: Patient */}
-            <div style={{ background: '#f8faff', padding: '20px', borderRadius: '14px', marginBottom: '20px' }}>
-              <h4 style={{ color: '#0f3b5e', marginBottom: '14px' }}><i className="fas fa-user-injured"></i> 2. Patient Information</h4>
+            <div style={{ background: '#f4f9f6', padding: '20px', borderRadius: '14px', marginBottom: '20px' }}>
+              <h4 style={{ color: '#0d5a3d', marginBottom: '14px' }}><i className="fas fa-user-injured"></i> 2. Patient Information</h4>
               <div className="form-grid-2">
                 <div className="form-group"><label>Patient Full Name *</label><input type="text" value={form.patientName} onChange={(e) => setForm({ ...form, patientName: e.target.value })} placeholder="Ahmed Kamara" required /></div>
                 <div className="form-group"><label>HealFund ID (Optional)</label><input type="text" value={form.patientId} onChange={(e) => setForm({ ...form, patientId: e.target.value })} placeholder="HF-0247" /></div>
@@ -167,8 +167,8 @@ export default function ReferralPortal({ currentLang, currentUser, setActiveModu
             </div>
 
             {/* Section 3: Clinical */}
-            <div style={{ background: '#f8faff', padding: '20px', borderRadius: '14px', marginBottom: '20px' }}>
-              <h4 style={{ color: '#0f3b5e', marginBottom: '14px' }}><i className="fas fa-notes-medical"></i> 3. Clinical Details</h4>
+            <div style={{ background: '#f4f9f6', padding: '20px', borderRadius: '14px', marginBottom: '20px' }}>
+              <h4 style={{ color: '#0d5a3d', marginBottom: '14px' }}><i className="fas fa-notes-medical"></i> 3. Clinical Details</h4>
               <div className="form-grid-2">
                 <div className="form-group">
                   <label>Department *</label>
@@ -229,10 +229,10 @@ export default function ReferralPortal({ currentLang, currentUser, setActiveModu
                 <p style={{ color: '#7a8a9e', textAlign: 'center', padding: '20px' }}>No referrals found.</p>
               ) : filteredReferrals.map((r) => (
                 <div key={r._id || r.referralId} onClick={() => setSelectedReferral(r)}
-                  style={{ padding: '16px', borderRadius: '12px', background: selectedReferral?.referralId === r.referralId ? '#e3f0fa' : '#fafcff', border: selectedReferral?.referralId === r.referralId ? '2px solid #078930' : '1px solid #e9edf4', marginBottom: '12px', cursor: 'pointer', transition: '0.2s' }}>
+                  style={{ padding: '16px', borderRadius: '12px', background: selectedReferral?.referralId === r.referralId ? '#ddf5e8' : '#f4f9f6', border: selectedReferral?.referralId === r.referralId ? '2px solid #078930' : '1px solid #d4f0e0', marginBottom: '12px', cursor: 'pointer', transition: '0.2s' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                     <div>
-                      <h4 style={{ color: '#0f3b5e', fontSize: '17px' }}>{r.referralId} — {r.patientName} <span style={{ fontSize: '13px', color: '#5e6f82' }}>({r.patientAge}y, {r.patientGender})</span></h4>
+                      <h4 style={{ color: '#0d5a3d', fontSize: '17px' }}>{r.referralId} — {r.patientName} <span style={{ fontSize: '13px', color: '#5e6f82' }}>({r.patientAge}y, {r.patientGender})</span></h4>
                       <p style={{ fontSize: '14px', color: '#4a5a6e', margin: '4px 0' }}>
                         <i className="fas fa-arrow-right" style={{ color: '#078930' }}></i> <strong>{r.sendingHospitalName}</strong> → <strong>{r.receivingHospitalName}</strong>
                       </p>
@@ -244,7 +244,7 @@ export default function ReferralPortal({ currentLang, currentUser, setActiveModu
                         {r.status === 'Pending Review' && <i className="fas fa-clock"></i>}
                         {' '}{r.status}
                       </span>
-                      <div style={{ fontSize: '12px', color: r.urgency === 'High' ? '#da121a' : '#0f3b5e', marginTop: '6px', fontWeight: 600 }}>{r.urgency} Priority</div>
+                      <div style={{ fontSize: '12px', color: r.urgency === 'High' ? '#da121a' : '#0d5a3d', marginTop: '6px', fontWeight: 600 }}>{r.urgency} Priority</div>
                     </div>
                   </div>
                 </div>
@@ -259,8 +259,8 @@ export default function ReferralPortal({ currentLang, currentUser, setActiveModu
                   <button onClick={() => setSelectedReferral(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7a8a9e', fontSize: '18px' }}>✕</button>
                 </div>
 
-                <div style={{ background: '#f8faff', padding: '16px', borderRadius: '12px', marginBottom: '16px' }}>
-                  <h4 style={{ color: '#0f3b5e', fontSize: '18px' }}>{selectedReferral.referralId}</h4>
+                <div style={{ background: '#f4f9f6', padding: '16px', borderRadius: '12px', marginBottom: '16px' }}>
+                  <h4 style={{ color: '#0d5a3d', fontSize: '18px' }}>{selectedReferral.referralId}</h4>
                   <p style={{ color: '#5e6f82', fontSize: '13px' }}>Issued: {new Date(selectedReferral.createdAt).toLocaleString()}</p>
                 </div>
 
@@ -284,21 +284,21 @@ export default function ReferralPortal({ currentLang, currentUser, setActiveModu
                   </div>
                 )}
 
-                <div style={{ marginTop: '16px', padding: '12px', background: '#fafcff', borderRadius: '10px', border: '1px solid #e9edf4' }}>
+                <div style={{ marginTop: '16px', padding: '12px', background: '#f4f9f6', borderRadius: '10px', border: '1px solid #d4f0e0' }}>
                   <strong>Reason for Referral:</strong>
                   <p style={{ fontSize: '14px', color: '#2c3e50', marginTop: '4px' }}>{selectedReferral.reasonForReferral}</p>
                 </div>
 
                 {selectedReferral.clinicalSummary && (
-                  <div style={{ marginTop: '12px', padding: '12px', background: '#fafcff', borderRadius: '10px', border: '1px solid #e9edf4' }}>
+                  <div style={{ marginTop: '12px', padding: '12px', background: '#f4f9f6', borderRadius: '10px', border: '1px solid #d4f0e0' }}>
                     <strong>Clinical Summary:</strong>
                     <p style={{ fontSize: '14px', color: '#4a5a6e', marginTop: '4px' }}>{selectedReferral.clinicalSummary}</p>
                   </div>
                 )}
 
                 {/* Actions */}
-                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #eef2f7' }}>
-                  <h5 style={{ marginBottom: '10px', color: '#0f3b5e' }}>
+                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #e8f4ec' }}>
+                  <h5 style={{ marginBottom: '10px', color: '#0d5a3d' }}>
                     <i className="fas fa-hospital-alt"></i> Zewditu Hospital Decision:
                   </h5>
                   {selectedReferral.status === 'Pending Review' ? (

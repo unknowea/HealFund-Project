@@ -50,18 +50,18 @@ export default function QueuePortal({ currentLang, currentUser }) {
 
   const activeTicket = queueItems.find((q) => q.token === activeQueueToken) || queueItems[0];
 
-  const statusColors = { Scheduled: '#078930', Waiting: '#f59e0b', 'In Progress': '#0f3b5e', Completed: '#6b7280', 'No Show': '#da121a' };
+  const statusColors = { Scheduled: '#078930', Waiting: '#f59e0b', 'In Progress': '#0d5a3d', Completed: '#6b7280', 'No Show': '#da121a' };
 
   return (
     <div>
       {/* Header */}
-      <div className="card" style={{ background: 'linear-gradient(135deg, #0f3b5e 0%, #078930 100%)', color: '#fff' }}>
+      <div className="card" style={{ background: 'linear-gradient(135deg, #0d5a3d 0%, #078930 100%)', color: '#fff' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <h2 style={{ fontSize: '24px', marginBottom: '6px', color: '#fff' }}>
               <i className="fas fa-list-ol"></i> {isAm ? 'የዘውዲቱ ሆስፒታል ተራ አስተዳደር' : 'Zewditu Hospital Queue Management'}
             </h2>
-            <p style={{ color: '#e0f2fe', fontSize: '14px', maxWidth: '700px' }}>
+            <p style={{ color: '#d4f0e0', fontSize: '14px', maxWidth: '700px' }}>
               {isAm ? 'ታካሚዎችን ይቀበሉ፣ ሁኔታ ይቀይሩ እና ተራ ያስተዳድሩ።' : 'Monitor patient flow, update statuses, and manage the live clinic queue.'}
             </p>
           </div>
@@ -86,7 +86,7 @@ export default function QueuePortal({ currentLang, currentUser }) {
       {/* Stats row */}
       <div className="stats-row" style={{ marginTop: 0 }}>
         {[
-          ['Scheduled', '#078930'], ['Waiting', '#f59e0b'], ['In Progress', '#0f3b5e'], ['Completed', '#6b7280']
+          ['Scheduled', '#078930'], ['Waiting', '#f59e0b'], ['In Progress', '#0d5a3d'], ['Completed', '#6b7280']
         ].map(([status, color]) => (
           <div key={status} className="stat-item" style={{ borderLeft: `4px solid ${color}` }}>
             <h2 style={{ color }}>{queueItems.filter((q) => q.status === status).length}</h2>
@@ -104,10 +104,10 @@ export default function QueuePortal({ currentLang, currentUser }) {
                 <h3><i className="fas fa-ticket-alt"></i> Queue Token Details</h3>
                 <span className="status-badge status-verified">{activeTicket.status}</span>
               </div>
-              <div style={{ textAlign: 'center', background: '#f8faff', padding: '24px', borderRadius: '16px', marginBottom: '20px', border: '1px solid #e9edf4' }}>
+              <div style={{ textAlign: 'center', background: '#f4f9f6', padding: '24px', borderRadius: '16px', marginBottom: '20px', border: '1px solid #d4f0e0' }}>
                 <span style={{ fontSize: '14px', color: '#5e6f82', fontWeight: 600 }}>Queue Token</span>
                 <h1 style={{ fontSize: '48px', color: '#078930', margin: '4px 0' }}>{activeTicket.token}</h1>
-                <h3 style={{ color: '#0f3b5e', fontSize: '20px' }}>{activeTicket.patientName}</h3>
+                <h3 style={{ color: '#0d5a3d', fontSize: '20px' }}>{activeTicket.patientName}</h3>
                 <p style={{ color: '#5e6f82', fontSize: '14px', margin: 0 }}>Patient ID: {activeTicket.patientId}</p>
               </div>
 
@@ -123,16 +123,16 @@ export default function QueuePortal({ currentLang, currentUser }) {
                 </div>
               ))}
 
-              <div style={{ marginTop: '20px', background: '#fafcff', padding: '16px', borderRadius: '12px', border: '1px solid #e2eaf3' }}>
-                <h5 style={{ color: '#0f3b5e', marginBottom: '8px' }}><i className="fas fa-file-invoice"></i> Required Documents:</h5>
+              <div style={{ marginTop: '20px', background: '#f4f9f6', padding: '16px', borderRadius: '12px', border: '1px solid #d4f0e0' }}>
+                <h5 style={{ color: '#0d5a3d', marginBottom: '8px' }}><i className="fas fa-file-invoice"></i> Required Documents:</h5>
                 <ul style={{ paddingLeft: '20px', fontSize: '14px', color: '#4a5a6e' }}>
                   {(activeTicket.requiredDocuments || []).map((doc, i) => <li key={i}>{doc}</li>)}
                 </ul>
               </div>
 
               {/* Status Management */}
-              <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #eef2f7' }}>
-                <h5 style={{ color: '#0f3b5e', marginBottom: '12px' }}><i className="fas fa-cogs"></i> Update Status:</h5>
+              <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #e8f4ec' }}>
+                <h5 style={{ color: '#0d5a3d', marginBottom: '12px' }}><i className="fas fa-cogs"></i> Update Status:</h5>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   {['Waiting', 'In Progress', 'Completed', 'No Show'].map((s) => (
                     <button key={s} onClick={() => handleUpdateStatus(activeTicket.token, s)}

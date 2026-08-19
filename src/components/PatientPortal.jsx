@@ -17,6 +17,10 @@ export default function PatientPortal({
   const [uploadedFile, setUploadedFile] = useState(null);
   const [fileProgress, setFileProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
+  const [myDocuments, setMyDocuments] = useState([]);
+  const [waitingListEntry, setWaitingListEntry] = useState(null);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [fileCategory, setFileCategory] = useState('Privacy & Diagnostic Report');
   const [appointmentsList, setAppointmentsList] = useState([
     { id: 1, date: '25 Aug 2026, 10:00 AM', doctor: 'Dr. M. Worku', hospital: 'Zewditu Hospital', status: 'Confirmed' },
     { id: 2, date: '2 Sep 2026, 2:30 PM', doctor: 'Dr. S. Alemu', hospital: 'Zewditu Hospital', status: 'Pending' },
@@ -36,7 +40,28 @@ export default function PatientPortal({
     status: 'Verified',
   };
 
-  // Generate QR Code on canvas
+  // Fetch patient's own documents & waiting list status (no raw file paths exposed)
+  const fetchMyDocuments = async () => {
+    if (!defaultUser.patientId || defaultUser.patientId === 'HF-XXXX') return;
+    setDocsLoading(true);
+    try {
+      const res = await fetch(`/api/files/my-documents?patientId=${encodeURIComponent(defaultUser.patientId)}`);
+      const data = await res.json();
+      if (data.success) {
+        setMyDocuments(data.documents);
+        if (data.waitingListEntry) setWaitingListEntry(data.waitingListEntry);
+      }
+    } catch {
+      // server offline — keep default empty state
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMyDocuments();
+  }, [activeTab]);
+
   useEffect(() => {
     if (canvasRef.current && activeTab === 'dashboard') {
       const qrData =
@@ -86,6 +111,9 @@ export default function PatientPortal({
     setFileProgress(30);
     const formData = new FormData();
     formData.append('medicalFile', uploadedFile);
+    formData.append('patientId', defaultUser.patientId);
+    formData.append('patientName', defaultUser.name);
+    formData.append('category', fileCategory);
 
     try {
       setFileProgress(70);
@@ -95,12 +123,15 @@ export default function PatientPortal({
       });
       const data = await res.json();
       setFileProgress(100);
-      setUploadStatus('✅ File uploaded successfully! Waiting for Zewditu Hospital to verify.');
-      setModalMessage('Your medical document has been submitted to Zewditu Memorial Hospital for verification.');
+      setUploadStatus('✅ Confidential document uploaded successfully! Awaiting Admin verification.');
+      setModalMessage('Your document has been submitted to HealFund Administration for verification.');
+      setUploadedFile(null);
+      fetchMyDocuments();
     } catch (err) {
       setFileProgress(100);
-      setUploadStatus('✅ File uploaded successfully! Waiting for Zewditu Hospital to verify.');
-      setModalMessage('Your medical document has been submitted to Zewditu Memorial Hospital for verification.');
+      setUploadStatus('✅ Document submitted successfully! Waiting for Admin verification.');
+      setModalMessage('Your document has been submitted to HealFund Administration for verification.');
+      fetchMyDocuments();
     }
   };
 
@@ -347,57 +378,146 @@ export default function PatientPortal({
         </div>
       )}
 
-      {/* PAGE: FILES */}
+      {/* PAGE: FILES & PRIVACY DOCUMENT STATUS */}
       {activeTab === 'files' && (
-        <div className="card">
-          <div className="card-header">
-            <h3><i className="fas fa-upload"></i> {isAm ? 'ለማረጋገጫ የሕክምና ፋይል ስቀል' : 'Upload Medical File for Verification'}</h3>
-            <i className="fas fa-shield-alt" style={{ color: '#28a745' }}></i>
+        <div>
+          {/* Privacy Notice Banner */}
+          <div style={{ background: '#f0f4fd', borderLeft: '4px solid #078930', padding: '14px 18px', borderRadius: '10px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <i className="fas fa-lock" style={{ fontSize: '24px', color: '#078930' }}></i>
+            <div>
+              <h4 style={{ margin: 0, color: '#0f3b5e' }}>
+                {isAm ? '🔒 የውሂብ ሚስጥራዊነት ዋስትና' : '🔒 Patient Privacy & Data Protection'}
+              </h4>
+              <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#4a5a6e' }}>
+                {isAm
+                  ? 'የሚስቅሏቸው የሕክምና ሰነዶች በምስጢር የተጠበቁ ናቸው። መዳረሻ ያላቸው የተፈቀደላቸው የሂልፈንድ አስተዳዳሪዎች (Admins) ብቻ ናቸው።'
+                  : 'Your medical files are strictly confidential and encrypted. Access is limited solely to authorized HealFund Administrators for verification.'}
+              </p>
+            </div>
           </div>
-          <p style={{ fontSize: '14px', color: '#4a5a6e', marginBottom: '16px' }}>
-            {isAm
-              ? 'የሕክምና ሰነዶችዎን (PDF, JPG, PNG) ለማረጋገጫ ወደ ዘውዲቱ ሆስፒታል ያስረክቡ። ከተረጋገጠ በኋላ ሁኔታዎ ይዘመናል።'
-              : 'Submit your medical documents (PDF, JPG, PNG) to Zewditu Memorial Hospital for verification. Once verified, your status will be updated.'}
-          </p>
 
-          <div
-            className="upload-area"
-            onClick={() => document.getElementById('fileInputReact').click()}
-          >
-            <i className="fas fa-cloud-upload-alt"></i>
-            <p>
-              <strong>{isAm ? 'ጠቅ ያድርጉ ወይም ጎትተው ይጣሉ' : 'Click or drag & drop'}</strong>{' '}
-              <span>{isAm ? 'የሕክምና ፋይልዎን እዚህ' : 'your medical file here'}</span>
+          <div className="card">
+            <div className="card-header">
+              <h3><i className="fas fa-upload"></i> {isAm ? 'ለማረጋገጫ የሕክምና ወይም የግል ሰነድ ስቀል' : 'Upload Confidential Medical & Privacy Documents'}</h3>
+              <i className="fas fa-shield-alt" style={{ color: '#28a745' }}></i>
+            </div>
+            <p style={{ fontSize: '14px', color: '#4a5a6e', marginBottom: '16px' }}>
+              {isAm
+                ? 'የሕክምና ሰነዶችዎን (PDF, JPG, PNG) ለማረጋገጫ እና ለተራ ቁጥር (Waiting List) ምደባ ለአስተዳዳሪዎች ያስረክቡ።'
+                : 'Submit your diagnostic reports, medical letters, or ID files for Admin verification and placement on the hospital waiting list.'}
             </p>
-            <span className="file-types">Supported: PDF, JPG, PNG (max 10MB)</span>
-            <input
-              type="file"
-              id="fileInputReact"
-              style={{ display: 'none' }}
-              accept=".pdf,.jpg,.jpeg,.png"
-              onChange={(e) => handleFileUpload(e.target.files[0])}
-            />
+
+            <div className="form-group" style={{ maxWidth: '400px', marginBottom: '16px' }}>
+              <label><i className="fas fa-tags" style={{ color: '#078930' }}></i> {isAm ? 'የሰነድ ዓይነት' : 'Document Privacy Category'}</label>
+              <select value={fileCategory} onChange={(e) => setFileCategory(e.target.value)} style={{ padding: '9px', fontSize: '14px', borderRadius: '8px', border: '1px solid #d0dbe8', width: '100%' }}>
+                <option value="Privacy & Diagnostic Report">Privacy & Diagnostic Report (ECG, Lab, X-Ray)</option>
+                <option value="Confidential Health File">Confidential Health File (Doctor Referral / Clinical Summary)</option>
+                <option value="Government ID / Financial Proof">Government ID / Financial Proof</option>
+              </select>
+            </div>
+
+            <div
+              className="upload-area"
+              onClick={() => document.getElementById('fileInputReact').click()}
+            >
+              <i className="fas fa-cloud-upload-alt"></i>
+              <p>
+                <strong>{isAm ? 'ጠቅ ያድርጉ ወይም ጎትተው ይጣሉ' : 'Click or drag & drop'}</strong>{' '}
+                <span>{isAm ? 'የሕክምና ፋይልዎን እዚህ' : 'your medical file here'}</span>
+              </p>
+              <span className="file-types">Supported: PDF, JPG, PNG (max 10MB)</span>
+              <input
+                type="file"
+                id="fileInputReact"
+                style={{ display: 'none' }}
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => handleFileUpload(e.target.files[0])}
+              />
+            </div>
+
+            {uploadStatus && (
+              <div style={{ background: '#f0f5fa', padding: '12px', borderRadius: '10px', marginBottom: '14px', fontSize: '14px' }}>
+                {uploadStatus}
+              </div>
+            )}
+
+            {fileProgress > 0 && (
+              <div className="progress-container">
+                <div className="progress-bar-fill" style={{ width: `${fileProgress}%` }}></div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+              <button className="btn btn-success" onClick={submitFileVerification} disabled={!uploadedFile}>
+                <i className="fas fa-paper-plane"></i> {isAm ? 'ለማረጋገጫ አስረክብ' : 'Submit for Admin Verification'}
+              </button>
+              <button className="btn btn-outline" onClick={() => { setUploadedFile(null); setUploadStatus(''); setFileProgress(0); }}>
+                <i className="fas fa-times"></i> {isAm ? 'አጥራ' : 'Clear'}
+              </button>
+            </div>
           </div>
 
-          {uploadStatus && (
-            <div style={{ background: '#f0f5fa', padding: '12px', borderRadius: '10px', marginBottom: '14px', fontSize: '14px' }}>
-              {uploadStatus}
+          {/* MY SUBMITTED DOCUMENTS & WAITING LIST STATUS */}
+          <div className="card" style={{ marginTop: '24px' }}>
+            <div className="card-header">
+              <h3><i className="fas fa-folder-open"></i> {isAm ? 'የተላኩ ሰነዶች እና የማረጋገጫ ሁኔታ' : 'Your Submitted Documents & Waiting List Status'}</h3>
+              <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={fetchMyDocuments}>
+                <i className="fas fa-sync-alt"></i> {isAm ? 'አድስ' : 'Refresh Status'}
+              </button>
             </div>
-          )}
 
-          {fileProgress > 0 && (
-            <div className="progress-container">
-              <div className="progress-bar-fill" style={{ width: `${fileProgress}%` }}></div>
-            </div>
-          )}
+            {docsLoading ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: '#7a8a9e' }}>
+                <i className="fas fa-spinner fa-spin"></i> Loading document status...
+              </div>
+            ) : myDocuments.length === 0 ? (
+              <div style={{ padding: '24px', textAlign: 'center', color: '#7a8a9e' }}>
+                No submitted documents found for patient ID <strong>{defaultUser.patientId}</strong>.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {myDocuments.map((doc) => (
+                  <div key={doc.id} style={{ background: '#f8fafc', border: '1px solid #e2eaf3', borderRadius: '12px', padding: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                      <div>
+                        <h4 style={{ margin: 0, color: '#0f3b5e', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <i className="fas fa-file-medical" style={{ color: '#078930' }}></i>
+                          {doc.originalName}
+                          <i className="fas fa-lock" style={{ fontSize: '11px', color: '#94a3b8' }} title="Confidential — Admin Access Only"></i>
+                        </h4>
+                        <div style={{ fontSize: '12px', color: '#7a8a9e', marginTop: '3px' }}>
+                          ID: {doc.id} · Category: <strong>{doc.category || 'Privacy Record'}</strong> · Uploaded: {new Date(doc.uploadDate).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <span className={`status-badge ${doc.status === 'Verified' ? 'status-verified' : doc.status === 'Rejected' ? 'status-rejected' : 'status-pending'}`}>
+                        {doc.status}
+                      </span>
+                    </div>
 
-          <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
-            <button className="btn btn-success" onClick={submitFileVerification} disabled={!uploadedFile}>
-              <i className="fas fa-paper-plane"></i> {isAm ? 'ለማረጋገጫ አስረክብ' : 'Submit for Verification'}
-            </button>
-            <button className="btn btn-outline" onClick={() => { setUploadedFile(null); setUploadStatus(''); setFileProgress(0); }}>
-              <i className="fas fa-times"></i> {isAm ? 'አጥራ' : 'Clear'}
-            </button>
+                    {/* Waiting List Token Display */}
+                    {doc.queueToken && (
+                      <div style={{ marginTop: '12px', background: '#e0f2fe', border: '1px solid #bae6fd', padding: '10px 14px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ color: '#0369a1', fontSize: '14px', fontWeight: 600 }}>
+                          <i className="fas fa-ticket-alt" style={{ marginRight: '6px' }}></i>
+                          Approved on Waiting List — Queue Token: <strong>{doc.queueToken}</strong>
+                        </div>
+                        <button className="btn btn-primary" style={{ fontSize: '12px', padding: '4px 12px' }} onClick={() => setActiveModule ? setActiveModule('queue') : null}>
+                          View Queue Tracker
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Rejection Note Feedback */}
+                    {doc.status === 'Rejected' && doc.adminNote && (
+                      <div style={{ marginTop: '12px', background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', padding: '10px 14px', borderRadius: '8px', fontSize: '13px' }}>
+                        <i className="fas fa-exclamation-triangle" style={{ marginRight: '6px' }}></i>
+                        <strong>Admin Feedback / Reason for Rejection:</strong> {doc.adminNote}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

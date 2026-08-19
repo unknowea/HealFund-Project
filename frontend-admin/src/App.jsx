@@ -6,7 +6,7 @@ import ReferralPortal from './components/ReferralPortal';
 import QueuePortal from './components/QueuePortal';
 
 export default function App() {
-  const [activeModule, setActiveModule] = useState('inbox');
+  const [activeModule, setActiveModule] = useState('dashboard');
   const [currentLang, setCurrentLang] = useState('en');
   const [currentUser, setCurrentUser] = useState(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -16,9 +16,13 @@ export default function App() {
     const savedUser = localStorage.getItem('healfund_user');
     const savedToken = localStorage.getItem('healfund_token');
     if (savedUser && savedToken) {
-      const user = JSON.parse(savedUser);
-      if (user.role === 'admin' || user.role === 'hospital_officer') {
-        setCurrentUser(user);
+      try {
+        const user = JSON.parse(savedUser);
+        if (user.role === 'admin' || user.role === 'hospital_officer') {
+          setCurrentUser(user);
+        }
+      } catch (e) {
+        console.error('Failed to parse saved user', e);
       }
     }
   }, []);
@@ -31,35 +35,11 @@ export default function App() {
 
   const handleLoginSuccess = (user) => {
     setCurrentUser(user);
-    setActiveModule('inbox');
+    setActiveModule('dashboard');
   };
 
-  if (!currentUser) {
-    return (
-      <div className="app-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}>
-        <div className="card" style={{ maxWidth: '480px', width: '100%', textAlign: 'center', padding: '48px 32px' }}>
-          <div style={{ fontSize: '56px', color: '#078930', marginBottom: '16px' }}>
-            <i className="fas fa-shield-alt"></i>
-          </div>
-          <h2 style={{ color: '#0f3b5e', marginBottom: '8px', fontSize: '26px' }}>HealFund Admin Portal</h2>
-          <p style={{ color: '#4a5a6e', marginBottom: '28px', fontSize: '15px' }}>
-            This portal is for authorised hospital staff only. Sign in with your staff credentials.
-          </p>
-          <button className="btn btn-primary" style={{ width: '100%', padding: '12px' }} onClick={() => setIsAuthOpen(true)}>
-            <i className="fas fa-sign-in-alt"></i> Staff Sign In
-          </button>
-          <div style={{ marginTop: '16px', fontSize: '13px', color: '#7a8a9e' }}>
-            Demo: <strong>admin@zewditu.gov.et</strong> / <strong>admin123</strong><br />
-            or: <strong>staff@lidetahc.gov.et</strong> / <strong>hospital123</strong>
-          </div>
-        </div>
-        <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onLoginSuccess={handleLoginSuccess} currentLang={currentLang} adminMode />
-      </div>
-    );
-  }
-
   return (
-    <div className="app-container">
+    <div className="app-container" style={{ minHeight: '100vh', background: '#f8fafc' }}>
       <Navbar
         activeModule={activeModule}
         setActiveModule={setActiveModule}
@@ -69,33 +49,37 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      <main>
-        {/* inbox and messages both go to AdminPortal — it handles its own internal tab */}
-        {(activeModule === 'inbox' || activeModule === 'messages') && (
-          <AdminPortal
-            currentLang={currentLang}
-            currentUser={currentUser}
-            activeTab={activeModule}
-          />
-        )}
-
-        {activeModule === 'referrals' && (
+      <main style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
+        {activeModule === 'referrals' && currentUser ? (
           <ReferralPortal
             currentLang={currentLang}
             currentUser={currentUser}
             setActiveModule={setActiveModule}
           />
-        )}
-
-        {activeModule === 'queue' && (
+        ) : activeModule === 'queue' && currentUser ? (
           <QueuePortal currentLang={currentLang} currentUser={currentUser} />
+        ) : (
+          <AdminPortal
+            currentLang={currentLang}
+            currentUser={currentUser}
+            activeTab={activeModule === 'inbox' ? 'messages' : activeModule === 'messages' ? 'chat' : activeModule}
+            onLoginSuccess={handleLoginSuccess}
+            onLogout={handleLogout}
+          />
         )}
       </main>
 
-      <footer className="footer-note">
-        <i className="fas fa-hospital"></i>{' '}
-        <span>HealFund Admin — Zewditu Memorial Hospital Operations Portal</span>
+      <footer className="footer-note" style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '13px' }}>
+        <i className="fas fa-shield-alt"></i> HealFund Standalone Administration Hub · Zewditu Memorial Hospital Operations
       </footer>
+
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onLoginSuccess={handleLoginSuccess}
+        currentLang={currentLang}
+        adminMode
+      />
     </div>
   );
 }

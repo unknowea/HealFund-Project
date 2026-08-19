@@ -46,6 +46,10 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.get('/', (req, res) => {
+  res.json({ success: true, message: 'HealFund Backend API running', version: '2.0.0' });
+});
+
 // ─── STATIC UPLOADS ────────────────────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
