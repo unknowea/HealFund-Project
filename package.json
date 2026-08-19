@@ -2,12 +2,13 @@
   "name": "healfund-root",
   "private": true,
   "version": "2.0.0",
+  "type": "module",
   "scripts": {
     "install:all": "cd backend && npm install && cd ../frontend-user && npm install && cd ../frontend-admin && npm install",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:user\" \"npm run dev:admin\"",
-    "dev:backend": "cd backend && node server.js",
-    "dev:user": "cd frontend-user && npx vite",
-    "dev:admin": "cd frontend-admin && npx vite --port 3001",
+    "dev:backend": "node server/server.js",
+    "dev:user": "cd frontend-user && npm run dev",
+    "dev:admin": "cd frontend-admin && npm run dev",
     "build:user": "cd frontend-user && npx vite build",
     "build:admin": "cd frontend-admin && npx vite build"
   },

@@ -7,10 +7,9 @@ import QueuePortal from './components/QueuePortal';
 import FinancialAssistancePortal from './components/FinancialAssistancePortal';
 import AboutUs from './components/AboutUs';
 import ContactUs from './components/ContactUs';
-import AdminPortal from './components/AdminPortal';
 
 export default function App() {
-  const [activeModule, setActiveModule] = useState('home'); // 'home' | 'dashboard' | 'appointments' | 'files' | 'referral' | 'queue' | 'financial' | 'help' | 'about' | 'contact' | 'admin'
+  const [activeModule, setActiveModule] = useState('home');
   const [currentLang, setCurrentLang] = useState('en'); // 'en' | 'am'
   const [currentUser, setCurrentUser] = useState(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -25,7 +24,7 @@ export default function App() {
     setActiveModule('dashboard');
   };
 
-  const isProtectedRoute = ['dashboard', 'appointments', 'files', 'referral', 'queue', 'admin'].includes(activeModule);
+  const isProtectedRoute = ['dashboard', 'appointments', 'files', 'referral', 'queue'].includes(activeModule);
 
   return (
     <div className="app-container">
@@ -98,13 +97,6 @@ export default function App() {
 
             {activeModule === 'queue' && (
               <QueuePortal
-                currentLang={currentLang}
-                currentUser={currentUser}
-              />
-            )}
-
-            {activeModule === 'admin' && (
-              <AdminPortal
                 currentLang={currentLang}
                 currentUser={currentUser}
               />
