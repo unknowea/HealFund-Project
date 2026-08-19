@@ -27,6 +27,12 @@ export const login = (email, password) =>
 export const signup = (payload) =>
   handle(fetch(`${BASE}/auth/signup`, { method: 'POST', headers: headers(), body: JSON.stringify(payload) }));
 
+export const getProfile = () =>
+  handle(fetch(`${BASE}/auth/profile`, { headers: headers() }));
+
+export const updateProfile = (payload) =>
+  handle(fetch(`${BASE}/auth/profile`, { method: 'PUT', headers: headers(), body: JSON.stringify(payload) }));
+
 // ─── HOSPITALS ─────────────────────────────────────────────────────────────────
 export const getHospitals = () =>
   handle(fetch(`${BASE}/hospitals`, { headers: headers() }));

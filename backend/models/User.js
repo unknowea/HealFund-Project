@@ -13,6 +13,7 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ['patient', 'hospital_officer', 'admin'], default: 'patient' },
     hospitalId: { type: String },
     hospitalName: { type: String },
+    profilePhoto: { type: String, default: '' },
   },
   { timestamps: true }
 );

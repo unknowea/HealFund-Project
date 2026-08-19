@@ -15,6 +15,7 @@ import financialRoutes from './routes/financial.js';
 import fileRoutes from './routes/files.js';
 import messageRoutes from './routes/messages.js';
 import conversationRoutes from './routes/conversations.js';
+import adminRoutes from './routes/admin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -63,6 +64,7 @@ app.use('/api/financial-cases', financialRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/conversations', conversationRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ─── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

@@ -30,10 +30,24 @@ export default function FinancialAssistancePortal({ currentLang }) {
   const handleDonate = async (e) => {
     e.preventDefault();
     if (!selectedCase) return;
+
+    // Item 3: Cap donation to remaining amount
+    const remaining = selectedCase.targetAmount - selectedCase.raisedAmount;
+    const requestedAmt = parseFloat(donationAmount) || 0;
+    if (remaining <= 0) {
+      setDonationSuccessMsg('This case is already fully funded. Thank you!');
+      setSelectedCase(null);
+      return;
+    }
+    const actualAmt = Math.min(requestedAmt, remaining);
+    if (actualAmt !== requestedAmt) {
+      setDonationAmount(String(actualAmt));
+    }
+
     setDonating(true);
     try {
       const data = await donate(selectedCase.caseId, {
-        amount: donationAmount,
+        amount: actualAmt,
         donorName: donorName || 'Anonymous Supporter',
         paymentMethod,
       });
@@ -139,6 +153,11 @@ export default function FinancialAssistancePortal({ currentLang }) {
             </div>
             <p style={{ fontSize: '14px', color: '#5e6f82', marginBottom: '16px' }}>
               Case: <strong>{selectedCase.caseId}</strong> — Verified by {selectedCase.verifyingHospital}
+              {selectedCase.targetAmount - selectedCase.raisedAmount < selectedCase.targetAmount && (
+                <span style={{ display: 'block', marginTop: '4px', color: '#078930', fontWeight: 600 }}>
+                  Remaining to goal: <strong>{(selectedCase.targetAmount - selectedCase.raisedAmount).toLocaleString()} ETB</strong>
+                </span>
+              )}
             </p>
             <form onSubmit={handleDonate}>
               <div className="form-group">

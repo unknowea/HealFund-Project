@@ -50,24 +50,36 @@ router.post('/:id/donate', async (req, res) => {
     if (financialCase.status !== 'Active')
       return res.status(400).json({ success: false, message: 'This case is no longer active' });
 
-    financialCase.raisedAmount += donationVal;
+    // Cap donation so raisedAmount never exceeds targetAmount
+    const remaining = financialCase.targetAmount - financialCase.raisedAmount;
+    if (remaining <= 0)
+      return res.status(400).json({ success: false, message: 'This case is already fully funded' });
+
+    const actualDonation = Math.min(donationVal, remaining);
+
+    financialCase.raisedAmount += actualDonation;
     financialCase.donorsCount += 1;
     financialCase.donations.push({
       donorName: donorName || 'Anonymous Supporter',
-      amount: donationVal,
+      amount: actualDonation,
       paymentMethod: paymentMethod || 'Telebirr',
     });
 
     // Auto-close if fully funded
     if (financialCase.raisedAmount >= financialCase.targetAmount) {
+      financialCase.raisedAmount = financialCase.targetAmount; // ensure exact cap
       financialCase.status = 'Funded';
     }
 
     await financialCase.save();
 
+    const cappedMsg = actualDonation < donationVal
+      ? ` (adjusted to ${actualDonation} ETB — goal reached)`
+      : '';
+
     res.json({
       success: true,
-      message: `Thank you ${donorName || 'Supporter'}! Donation of ${donationVal} ETB via ${paymentMethod || 'Telebirr'} processed.`,
+      message: `Thank you ${donorName || 'Supporter'}! Donation of ${actualDonation} ETB via ${paymentMethod || 'Telebirr'} processed.${cappedMsg}`,
       case: financialCase,
     });
   } catch (err) {
