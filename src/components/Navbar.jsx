@@ -67,13 +67,6 @@ export default function Navbar({
               <span>{currentLang === 'am' ? 'ተራ እና ቀጠሮ' : 'Queue'}</span>
             </button>
 
-            <button
-              className={`module-tab ${activeModule === 'admin' ? 'active' : ''}`}
-              onClick={() => setActiveModule('admin')}
-            >
-              <i className="fas fa-inbox"></i>
-              <span>{currentLang === 'am' ? 'የአስተዳዳሪ ሳጥን' : 'Admin Inbox'}</span>
-            </button>
           </>
         )}
 

@@ -252,4 +252,89 @@ export const dataStore = {
       createdAt: '2026-08-15T11:10:00Z',
     },
   ],
+
+  // System admins (separate from hospital users)
+  admins: {
+    'superadmin@healfund.et': {
+      name: 'HealFund Administrator',
+      email: 'superadmin@healfund.et',
+      password: 'healfund@admin2026',
+      role: 'superadmin',
+      avatar: 'H',
+    },
+  },
+
+  // Patient uploaded documents — only admin can view & verify
+  patientDocuments: [
+    {
+      id: 'DOC-0001',
+      patientId: 'HF-0247',
+      patientName: 'Ahmed Kamara',
+      originalName: 'ECG_Report_0247.pdf',
+      filename: 'sample-ecg-report.pdf',
+      size: '1.20 MB',
+      type: 'pdf',
+      category: 'Privacy & Diagnostic Report',
+      isPrivacyDocument: true,
+      uploadDate: '2026-08-12T08:30:00Z',
+      status: 'Pending Verification', // 'Pending Verification' | 'Verified' | 'Rejected'
+      adminNote: '',
+      queueToken: null,
+    },
+    {
+      id: 'DOC-0002',
+      patientId: 'HF-0247',
+      patientName: 'Ahmed Kamara',
+      originalName: 'Lab_Results_Lideta.pdf',
+      filename: 'sample-lab-results.pdf',
+      size: '0.85 MB',
+      type: 'pdf',
+      category: 'Confidential Health File',
+      isPrivacyDocument: true,
+      uploadDate: '2026-08-12T08:35:00Z',
+      status: 'Verified',
+      adminNote: 'Lab values confirmed by Admin. Added to Zewditu Cardiology waiting list.',
+      queueToken: 'C-023',
+    },
+    {
+      id: 'DOC-0003',
+      patientId: 'HF-0312',
+      patientName: 'Bethlehem Alemu',
+      originalName: 'Ultrasound_Report.pdf',
+      filename: 'sample-ultrasound.pdf',
+      size: '2.10 MB',
+      type: 'pdf',
+      category: 'Privacy & Imaging Record',
+      isPrivacyDocument: true,
+      uploadDate: '2026-08-13T10:00:00Z',
+      status: 'Pending Verification',
+      adminNote: '',
+      queueToken: null,
+    },
+  ],
+
+  // Activity log for audit trail
+  activityLog: [
+    {
+      id: 'LOG-001',
+      action: 'Referral Accepted',
+      detail: 'REF-2026-00452 accepted → Zewditu Memorial Hospital',
+      actor: 'Dr. M. Worku',
+      timestamp: '2026-08-11T14:15:00Z',
+    },
+    {
+      id: 'LOG-002',
+      action: 'Financial Case Created',
+      detail: 'CASE-2026-8801 opened for Ahmed Kamara',
+      actor: 'System',
+      timestamp: '2026-08-11T16:00:00Z',
+    },
+    {
+      id: 'LOG-003',
+      action: 'Donation Received',
+      detail: 'CASE-2026-8801 received 500 ETB donation',
+      actor: 'Anonymous Donor',
+      timestamp: '2026-08-12T09:20:00Z',
+    },
+  ],
 };
