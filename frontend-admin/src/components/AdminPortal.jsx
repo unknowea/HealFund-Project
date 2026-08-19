@@ -26,15 +26,20 @@ function AdminLogin({ onLoginSuccess }) {
     setError('');
     setLoading(true);
     try {
-      const res = await API('/api/admin/login', {
+      const res = await API('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (data.success) {
-        localStorage.setItem('healfund_token', data.token || 'demo-admin-token');
-        localStorage.setItem('healfund_user', JSON.stringify(data.admin));
-        onLoginSuccess(data.admin);
+        if (data.user?.role === 'patient') {
+          setError('Access denied. Staff credentials required.');
+          setLoading(false);
+          return;
+        }
+        localStorage.setItem('healfund_token', data.token);
+        localStorage.setItem('healfund_user', JSON.stringify(data.user));
+        onLoginSuccess(data.user);
       } else {
         setError(data.message || 'Invalid credentials');
       }
@@ -70,7 +75,8 @@ function AdminLogin({ onLoginSuccess }) {
           </button>
         </form>
         <p className="admin-login-hint">
-          <i className="fas fa-info-circle"></i> Demo: <code>superadmin@healfund.et</code> / <code>healfund@admin2026</code>
+          <i className="fas fa-info-circle"></i> Demo: <code>admin@zewditu.gov.et</code> / <code>admin123</code>
+          &nbsp;or&nbsp; <code>staff@lidetahc.gov.et</code> / <code>hospital123</code>
         </p>
       </div>
     </div>

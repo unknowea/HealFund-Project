@@ -53,7 +53,6 @@ app.get('/', (req, res) => {
 // ─── STATIC UPLOADS ────────────────────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// ─── API ROUTES ────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/referrals', referralRoutes);
