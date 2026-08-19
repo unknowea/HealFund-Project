@@ -78,8 +78,24 @@ export const sendMessage = (payload) =>
 export const updateMessageStatus = (id, status) =>
   handle(fetch(`${BASE}/messages/${id}/status`, { method: 'PUT', headers: headers(), body: JSON.stringify({ status }) }));
 
+export const replyToMessage = (id, replyText) =>
+  handle(fetch(`${BASE}/messages/${id}/reply`, { method: 'POST', headers: headers(), body: JSON.stringify({ replyText }) }));
+
 export const deleteMessage = (id) =>
   handle(fetch(`${BASE}/messages/${id}`, { method: 'DELETE', headers: headers() }));
+
+// ─── CONVERSATIONS (Live Chat) ─────────────────────────────────────────────────
+export const getConversations = () =>
+  handle(fetch(`${BASE}/conversations`, { headers: headers() }));
+
+export const sendChatMessage = (conversationId, content, patientId, patientName) =>
+  handle(fetch(`${BASE}/conversations/messages`, {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ conversationId, content, patientId, patientName }),
+  }));
+
+export const markConversationRead = (conversationId) =>
+  handle(fetch(`${BASE}/conversations/${conversationId}/read`, { method: 'PUT', headers: headers() }));
 
 // ─── FILE UPLOAD ───────────────────────────────────────────────────────────────
 export const uploadFile = (file) => {

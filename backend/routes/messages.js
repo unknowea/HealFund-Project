@@ -49,6 +49,24 @@ router.put('/:id/status', protect, requireRole('admin', 'hospital_officer'), asy
   }
 });
 
+// POST /api/messages/:id/reply — admin replies (stores reply text in message)
+router.post('/:id/reply', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
+  try {
+    const { replyText } = req.body;
+    if (!replyText) return res.status(400).json({ success: false, message: 'Reply text required' });
+
+    const msg = await Message.findOneAndUpdate(
+      { messageId: req.params.id },
+      { $set: { status: 'Replied', reply: replyText, repliedAt: new Date() } },
+      { new: true }
+    );
+    if (!msg) return res.status(404).json({ success: false, message: 'Message not found' });
+    res.json({ success: true, data: msg, info: `Reply saved. In production this would email ${msg.contact}` });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
 // DELETE /api/messages/:id — admin / hospital officer
 router.delete('/:id', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {

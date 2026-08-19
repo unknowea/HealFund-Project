@@ -1,301 +1,203 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getConversations, sendChatMessage, markConversationRead } from '../api.js';
 
 export default function WhatsAppMessaging({ currentLang, currentUser, isAdmin = false }) {
   const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [selectedConv, setSelectedConv] = useState(null);
   const [messageInput, setMessageInput] = useState('');
   const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const messagesEndRef = useRef(null);
-
   const isAm = currentLang === 'am';
 
   useEffect(() => {
-    loadConversations();
-    // Auto-refresh conversations every 3 seconds
-    const interval = setInterval(loadConversations, 3000);
+    fetchConversations();
+    const interval = setInterval(fetchConversations, 4000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [selectedConversation?.messages]);
-
-  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, [selectedConv?.messages?.length]);
 
-  const loadConversations = async () => {
-    setLoading(true);
+  const fetchConversations = async () => {
     try {
-      let storageKey = isAdmin ? 'healfund_admin_conversations' : `healfund_patient_conversations_${currentUser?.id}`;
-      const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      setConversations(stored);
-      
-      if (!selectedConversation && stored.length > 0) {
-        setSelectedConversation(stored[0]);
+      const data = await getConversations();
+      const convs = data.conversations || [];
+      setConversations(convs);
+      if (!selectedConv && convs.length > 0) setSelectedConv(convs[0]);
+      else if (selectedConv) {
+        const updated = convs.find((c) => c.conversationId === selectedConv.conversationId);
+        if (updated) setSelectedConv(updated);
       }
     } catch (err) {
-      console.error('Error loading conversations:', err);
+      console.warn('Fetch conversations error:', err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!messageInput.trim() || !selectedConversation) return;
+  const handleSelectConv = async (conv) => {
+    setSelectedConv(conv);
+    if (conv.unreadByAdmin > 0) {
+      await markConversationRead(conv.conversationId).catch(() => {});
+      setConversations((prev) => prev.map((c) => c.conversationId === conv.conversationId ? { ...c, unreadByAdmin: 0 } : c));
+    }
+  };
 
-    const newMessage = {
-      id: `MSG-${Date.now()}`,
-      sender: isAdmin ? 'admin' : currentUser?.id || 'patient',
-      senderName: isAdmin ? 'Admin' : currentUser?.name || 'Patient',
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!messageInput.trim() || !selectedConv || sending) return;
+    setSending(true);
+
+    const optimisticMsg = {
+      _id: `temp-${Date.now()}`,
+      sender: 'admin',
+      senderName: 'HealFund Support',
       content: messageInput.trim(),
       timestamp: new Date().toISOString(),
-      status: 'sent', // pending, sent, delivered, read
     };
-
-    // Update local conversation
-    const updatedConversations = conversations.map((conv) => {
-      if (conv.id === selectedConversation.id) {
-        return {
-          ...conv,
-          messages: [...(conv.messages || []), newMessage],
-          lastMessage: messageInput.trim(),
-          lastMessageTime: new Date().toISOString(),
-          unreadCount: 0,
-        };
-      }
-      return conv;
-    });
-
-    setConversations(updatedConversations);
-    setSelectedConversation({
-      ...selectedConversation,
-      messages: [...(selectedConversation.messages || []), newMessage],
-    });
+    setSelectedConv((prev) => ({ ...prev, messages: [...(prev.messages || []), optimisticMsg] }));
+    const sentText = messageInput.trim();
     setMessageInput('');
 
-    // Save to localStorage
-    let storageKey = isAdmin ? 'healfund_admin_conversations' : `healfund_patient_conversations_${currentUser?.id}`;
-    localStorage.setItem(storageKey, JSON.stringify(updatedConversations));
-
-    // Try to sync with backend
     try {
-      await fetch('/api/conversations/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversationId: selectedConversation.id,
-          message: newMessage,
-        }),
-      });
+      await sendChatMessage(selectedConv.conversationId, sentText);
+      fetchConversations();
     } catch (err) {
-      console.warn('Backend offline, message saved locally:', err);
+      console.warn('Send error:', err.message);
+    } finally {
+      setSending(false);
     }
   };
 
-  const startNewConversation = (userId, userName) => {
-    const convId = isAdmin ? `CONV-ADMIN-${userId}` : `CONV-PATIENT-${currentUser?.id}-ADMIN`;
-    const existingConv = conversations.find((c) => c.id === convId);
-
-    if (existingConv) {
-      setSelectedConversation(existingConv);
-      return;
-    }
-
-    const newConv = {
-      id: convId,
-      participantId: userId,
-      participantName: userName,
-      participantRole: isAdmin ? 'patient' : 'admin',
-      messages: [],
-      lastMessage: '',
-      lastMessageTime: new Date().toISOString(),
-      unreadCount: 0,
-    };
-
-    const updated = [newConv, ...conversations];
-    setConversations(updated);
-    setSelectedConversation(newConv);
-
-    let storageKey = isAdmin ? 'healfund_admin_conversations' : `healfund_patient_conversations_${currentUser?.id}`;
-    localStorage.setItem(storageKey, JSON.stringify(updated));
-  };
-
-  const filteredConversations = conversations.filter((conv) =>
-    conv.participantName.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredConvs = conversations.filter((c) =>
+    (c.patientName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.conversationId || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadByAdmin || 0), 0);
+
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 200px)', gap: '0', borderRadius: '12px', overflow: 'hidden', background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-      {/* Conversations List */}
-      <div style={{ width: '320px', background: '#f5f5f5', borderRight: '1px solid #e5e5e5', display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
-        <div style={{ padding: '16px', borderBottom: '1px solid #e5e5e5', background: '#fff' }}>
-          <h3 style={{ margin: '0 0 12px 0', color: '#0f3b5e' }}>
-            <i className="fas fa-comments"></i> {isAm ? 'ዝግጅት' : 'Messages'}
-          </h3>
-          <input
-            type="text"
-            placeholder={isAm ? 'ፈልግ...' : 'Search...'}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid #e5e5e5',
-              borderRadius: '20px',
-              fontSize: '13px',
-              boxSizing: 'border-box',
-            }}
+    <div style={{ display: 'flex', height: 'calc(100vh - 220px)', minHeight: '500px', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+      {/* Sidebar */}
+      <div style={{ width: '300px', background: '#f8faff', borderRight: '1px solid #e2eaf3', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ padding: '16px', background: '#0f3b5e', color: '#fff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <h3 style={{ margin: 0, fontSize: '16px' }}>
+              <i className="fas fa-comments"></i> {isAm ? 'ቀጥታ ውይይቶች' : 'Patient Chats'}
+            </h3>
+            {totalUnread > 0 && (
+              <span style={{ background: '#da121a', color: '#fff', borderRadius: '12px', padding: '2px 8px', fontSize: '12px', fontWeight: 700 }}>{totalUnread}</span>
+            )}
+          </div>
+          <input type="text" placeholder={isAm ? 'ፈልግ...' : 'Search patients...'} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ width: '100%', padding: '8px 12px', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '20px', fontSize: '13px', background: 'rgba(255,255,255,0.15)', color: '#fff', outline: 'none', boxSizing: 'border-box' }}
           />
         </div>
 
-        {/* Conversations */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {filteredConversations.length === 0 ? (
-            <div style={{ padding: '20px', textAlign: 'center', color: '#999', fontSize: '13px' }}>
-              {isAm ? 'መልዕክቶች የሉም' : 'No conversations yet'}
+          {loading ? (
+            <div style={{ padding: '20px', textAlign: 'center', color: '#7a8a9e' }}><i className="fas fa-spinner fa-spin"></i></div>
+          ) : filteredConvs.length === 0 ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: '#7a8a9e', fontSize: '13px' }}>
+              <i className="fas fa-comment-slash" style={{ fontSize: '28px', marginBottom: '8px', display: 'block' }}></i>
+              {isAm ? 'ምንም ቀጥታ ውይይት የለም' : 'No patient conversations yet'}
             </div>
-          ) : (
-            filteredConversations.map((conv) => (
-              <div
-                key={conv.id}
-                onClick={() => setSelectedConversation(conv)}
-                style={{
-                  padding: '12px 16px',
-                  borderBottom: '1px solid #e5e5e5',
-                  background: selectedConversation?.id === conv.id ? '#e8f5e9' : '#fff',
-                  cursor: 'pointer',
-                  transition: 'background 0.2s',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = selectedConversation?.id === conv.id ? '#e8f5e9' : '#f9f9f9'}
-                onMouseLeave={(e) => e.currentTarget.style.background = selectedConversation?.id === conv.id ? '#e8f5e9' : '#fff'}
+          ) : filteredConvs.map((conv) => {
+            const isSelected = selectedConv?.conversationId === conv.conversationId;
+            return (
+              <div key={conv.conversationId} onClick={() => handleSelectConv(conv)}
+                style={{ padding: '14px 16px', borderBottom: '1px solid #e2eaf3', cursor: 'pointer', background: isSelected ? '#e8f5e9' : '#fff', transition: '0.15s' }}
+                onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = '#f8faff'; }}
+                onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = '#fff'; }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <strong style={{ color: '#0f3b5e', fontSize: '14px' }}>{conv.participantName}</strong>
-                  {conv.unreadCount > 0 && (
-                    <span style={{
-                      background: '#078930',
-                      color: '#fff',
-                      borderRadius: '12px',
-                      padding: '2px 8px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                    }}>
-                      {conv.unreadCount}
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: isSelected ? '#078930' : '#0f3b5e', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, flexShrink: 0 }}>
+                      {(conv.patientName || 'P').charAt(0).toUpperCase()}
+                    </div>
+                    <strong style={{ fontSize: '14px', color: '#0f3b5e' }}>{conv.patientName || conv.conversationId}</strong>
+                  </div>
+                  {conv.unreadByAdmin > 0 && (
+                    <span style={{ background: '#078930', color: '#fff', borderRadius: '12px', padding: '2px 7px', fontSize: '11px', fontWeight: 700, flexShrink: 0 }}>{conv.unreadByAdmin}</span>
                   )}
                 </div>
-                <p style={{ margin: 0, color: '#999', fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {conv.lastMessage || isAm ? 'ምንም መልዕክት የለም' : 'No messages'}
+                <p style={{ margin: 0, fontSize: '12px', color: '#7a8a9e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingLeft: '44px' }}>
+                  {conv.lastMessage || (isAm ? 'ምንም መልዕክት' : 'No messages yet')}
                 </p>
-                <span style={{ fontSize: '11px', color: '#bbb' }}>
-                  {new Date(conv.lastMessageTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                </span>
               </div>
-            ))
-          )}
+            );
+          })}
         </div>
       </div>
 
       {/* Chat Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
-        {selectedConversation ? (
+        {selectedConv ? (
           <>
-            {/* Chat Header */}
-            <div style={{ padding: '16px', borderBottom: '1px solid #e5e5e5', background: '#078930', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '14px 20px', background: '#078930', color: '#fff', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700 }}>
+                {(selectedConv.patientName || 'P').charAt(0).toUpperCase()}
+              </div>
               <div>
-                <h3 style={{ margin: 0, fontSize: '16px' }}>{selectedConversation.participantName}</h3>
-                <span style={{ fontSize: '12px', opacity: 0.8 }}>{selectedConversation.participantRole}</span>
+                <h4 style={{ margin: 0, fontSize: '15px' }}>{selectedConv.patientName || 'Patient'}</h4>
+                <span style={{ fontSize: '12px', opacity: 0.8 }}>{selectedConv.conversationId}</span>
               </div>
             </div>
 
-            {/* Messages */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', background: '#f5f5f5', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {(selectedConversation.messages || []).length === 0 ? (
-                <div style={{ textAlign: 'center', color: '#999', marginTop: 'auto', marginBottom: 'auto' }}>
-                  <p style={{ fontSize: '13px' }}>{isAm ? 'ምንም መልዕክት ገና' : 'No messages yet. Start the conversation!'}</p>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', background: '#f5f8fa', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {(selectedConv.messages || []).length === 0 ? (
+                <div style={{ textAlign: 'center', margin: 'auto', color: '#7a8a9e' }}>
+                  <div style={{ fontSize: '40px', marginBottom: '10px' }}>💬</div>
+                  <p style={{ fontSize: '14px' }}>{isAm ? 'ምንም መልዕክት ገና' : 'No messages yet. Start the conversation!'}</p>
                 </div>
-              ) : (
-                (selectedConversation.messages || []).map((msg) => {
-                  const isSent = isAdmin ? msg.sender === 'admin' : msg.sender === currentUser?.id;
-                  return (
-                    <div
-                      key={msg.id}
-                      style={{
-                        display: 'flex',
-                        justifyContent: isSent ? 'flex-end' : 'flex-start',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      <div
-                        style={{
-                          maxWidth: '70%',
-                          background: isSent ? '#078930' : '#fff',
-                          color: isSent ? '#fff' : '#0f3b5e',
-                          padding: '10px 14px',
-                          borderRadius: isSent ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                          wordWrap: 'break-word',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                        }}
-                      >
-                        <p style={{ margin: '0 0 4px 0', fontSize: '14px', lineHeight: '1.4' }}>
-                          {msg.content}
-                        </p>
-                        <span style={{ fontSize: '11px', opacity: 0.7 }}>
-                          {new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+              ) : (selectedConv.messages || []).map((msg, i) => {
+                const isAdmin = msg.sender === 'admin';
+                return (
+                  <div key={msg._id || i} style={{ display: 'flex', justifyContent: isAdmin ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: '8px' }}>
+                    {!isAdmin && (
+                      <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#0f3b5e', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>
+                        {(selectedConv.patientName || 'P').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div style={{ maxWidth: '68%' }}>
+                      <div style={{ background: isAdmin ? '#078930' : '#fff', color: isAdmin ? '#fff' : '#0f3b5e', padding: '10px 14px', borderRadius: isAdmin ? '18px 18px 4px 18px' : '18px 18px 18px 4px', wordWrap: 'break-word', boxShadow: '0 2px 6px rgba(0,0,0,0.08)', fontSize: '14px', lineHeight: '1.5' }}>
+                        {msg.content}
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#aaa', marginTop: '3px', textAlign: isAdmin ? 'right' : 'left' }}>
+                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
-                  );
-                })
-              )}
+                    {isAdmin && (
+                      <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#078930', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>
+                        A
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Message Input */}
-            <form onSubmit={handleSendMessage} style={{ padding: '16px', borderTop: '1px solid #e5e5e5', background: '#fff', display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
-                placeholder={isAm ? 'መልዕክት ይጻፉ...' : 'Type a message...'}
-                style={{
-                  flex: 1,
-                  padding: '10px 16px',
-                  border: '1px solid #e5e5e5',
-                  borderRadius: '20px',
-                  fontSize: '14px',
-                  fontFamily: 'inherit',
-                }}
+            <form onSubmit={handleSend} style={{ padding: '12px 16px', borderTop: '1px solid #e5e5e5', background: '#fff', display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder={isAm ? 'ለታካሚው መልስ ይጻፉ...' : 'Reply to patient...'}
+                disabled={sending} style={{ flex: 1, padding: '10px 16px', border: '1.5px solid #d0dbe8', borderRadius: '24px', fontSize: '14px', outline: 'none', fontFamily: 'inherit' }}
+                onFocus={(e) => e.target.style.borderColor = '#078930'}
+                onBlur={(e) => e.target.style.borderColor = '#d0dbe8'}
               />
-              <button
-                type="submit"
-                disabled={!messageInput.trim()}
-                style={{
-                  background: '#078930',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '40px',
-                  height: '40px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: !messageInput.trim() ? 'not-allowed' : 'pointer',
-                  fontSize: '18px',
-                  opacity: !messageInput.trim() ? 0.5 : 1,
-                }}
-              >
-                <i className="fas fa-paper-plane"></i>
+              <button type="submit" disabled={!messageInput.trim() || sending}
+                style={{ background: '#078930', color: '#fff', border: 'none', borderRadius: '50%', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (!messageInput.trim() || sending) ? 'not-allowed' : 'pointer', opacity: (!messageInput.trim() || sending) ? 0.5 : 1, fontSize: '16px' }}>
+                {sending ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-paper-plane"></i>}
               </button>
             </form>
           </>
         ) : (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
-            <p>{isAm ? 'ለመምረጥ ንግግር ይምረጡ' : 'Select a conversation to start messaging'}</p>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7a8a9e', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ fontSize: '56px' }}>💬</div>
+            <p style={{ fontSize: '16px', fontWeight: 600, color: '#0f3b5e' }}>{isAm ? 'ውይይት ይምረጡ' : 'Select a conversation'}</p>
+            <p style={{ fontSize: '13px' }}>{isAm ? 'ከግራ ዝርዝር ይምረጡ' : 'Choose a patient from the left to start chatting'}</p>
           </div>
         )}
       </div>

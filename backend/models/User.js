@@ -8,8 +8,7 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true, minlength: 6 },
     age: { type: Number },
     gender: { type: String, enum: ['Male', 'Female', 'Other'], default: 'Other' },
-    location: { type: String, default: 'Addis Ababa' },
-    patientId: { type: String, sparse: true }, // sparse allows multiple null values
+    location: { type: String, default: 'Addis Ababa' },    patientId: { type: String, sparse: true }, // sparse allows multiple null values
     status: { type: String, enum: ['Verified', 'Pending', 'Suspended'], default: 'Verified' },
     role: { type: String, enum: ['patient', 'hospital_officer', 'admin'], default: 'patient' },
     hospitalId: { type: String },

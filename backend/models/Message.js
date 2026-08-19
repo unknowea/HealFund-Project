@@ -22,6 +22,8 @@ const messageSchema = new mongoose.Schema(
       enum: ['Unread', 'Read', 'Replied'],
       default: 'Unread',
     },
+    reply: { type: String },
+    repliedAt: { type: Date },
   },
   { timestamps: true }
 );
