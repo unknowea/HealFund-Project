@@ -1145,7 +1145,15 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
 
   const loadDashboard = async () => {
     try {
-      const [sRes, lRes] = await Promise.all([API('/api/admin/stats'), API('/api/admin/activity-log')]);
+      const token = localStorage.getItem('healfund_token');
+      const authHeaders = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const [sRes, lRes] = await Promise.all([
+        fetch('/api/admin/stats', { headers: authHeaders }),
+        fetch('/api/admin/activity-log', { headers: authHeaders }),
+      ]);
       const sData = await sRes.json();
       const lData = await lRes.json();
       if (sData.success) setStats(sData.stats);
