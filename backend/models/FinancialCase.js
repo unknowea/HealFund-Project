@@ -15,7 +15,6 @@ const financialCaseSchema = new mongoose.Schema(
     age: { type: Number },
     location: { type: String },
     diagnosis: { type: String, required: true },
-    referralId: { type: String },
     verifyingHospital: { type: String },
     verifiedByDoctor: { type: String },
     verificationStage1: { type: String },

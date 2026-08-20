@@ -107,7 +107,6 @@ function DashboardTab({ stats, log }) {
     <div>
       <div className="admin-stats-grid">
         <StatCard icon="fas fa-users" label="Registered Users" value={fmt(stats.totalUsers)} color="#078930" />
-        <StatCard icon="fas fa-hospital-user" label="Referrals" value={fmt(stats.totalReferrals)} color="#0d5a3d" sub={`${stats.pendingReferrals} pending`} />
         <StatCard icon="fas fa-file-medical" label="Documents" value={fmt(stats.totalDocuments)} color="#6f42c1" sub={`${stats.pendingDocuments} awaiting review`} />
         <StatCard icon="fas fa-hand-holding-heart" label="Financial Cases" value={fmt(stats.totalFinancialCases)} color="#e07b00" sub={`${fmt(stats.totalDonors)} donors`} />
         <StatCard icon="fas fa-calendar-check" label="Appointments" value={fmt(stats.totalAppointments)} color="#078930" />
@@ -621,120 +620,6 @@ function UsersTab() {
   );
 }
 
-// --- Referrals Tab ---
-function ReferralsTab() {
-  const [referrals, setReferrals] = useState([]);
-  const [filter, setFilter] = useState('All');
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await API('/api/admin/referrals');
-      const data = await res.json();
-      if (data.success) setReferrals(data.referrals);
-    } finally { setLoading(false); }
-  };
-  useEffect(() => { load(); }, []);
-
-  const handleStatus = async (id, status) => {
-    await API(`/api/referrals/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
-    load(); setSelected(null);
-  };
-  const handleDelete = async (id) => {
-    await API(`/api/admin/referrals/${id}`, { method: 'DELETE' });
-    load(); setSelected(null);
-  };
-
-  const urgencyClass = (u) => u === 'High' ? 'status-urgency-high' : u === 'Medium' ? 'status-urgency-medium' : 'status-urgency-low';
-  const statusClass = (s) => s === 'Accepted' ? 'status-verified' : s === 'Rejected' ? 'status-rejected' : 'status-pending';
-
-  const filtered = referrals.filter((r) => {
-    const matchStatus = filter === 'All' || r.status === filter;
-    const matchSearch = r.patientName.toLowerCase().includes(search.toLowerCase()) || r.id.toLowerCase().includes(search.toLowerCase());
-    return matchStatus && matchSearch;
-  });
-
-  return (
-    <div>
-      <div className="admin-toolbar">
-        <div className="admin-search">
-          <i className="fas fa-search"></i>
-          <input type="text" placeholder="Search patient or referral ID…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-        <div className="admin-filter-pills">
-          {['All', 'Pending Review', 'Accepted', 'Rejected'].map((s) => (
-            <button key={s} className={`admin-pill ${filter === s ? 'active' : ''}`} onClick={() => setFilter(s)}>{s}</button>
-          ))}
-        </div>
-        <span className="admin-count-badge">{filtered.length} referrals</span>
-      </div>
-      {loading ? (
-        <div className="admin-loading"><i className="fas fa-spinner fa-spin"></i> Loading referrals…</div>
-      ) : (
-        <div className="card">
-          <table className="admin-table">
-            <thead>
-              <tr><th>Referral ID</th><th>Patient</th><th>From → To</th><th>Department</th><th>Urgency</th><th>Status</th><th>Created</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', color: '#7a8a9e' }}>No referrals found</td></tr>}
-              {filtered.map((r) => (
-                <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(r)}>
-                  <td><code className="admin-code">{r.id}</code></td>
-                  <td><div style={{ fontWeight: 600 }}>{r.patientName}</div><div style={{ fontSize: '12px', color: '#7a8a9e' }}>{r.patientId}</div></td>
-                  <td style={{ fontSize: '13px' }}>{r.sendingHospitalName} <span style={{ color: '#078930' }}>→</span> {r.receivingHospitalName}</td>
-                  <td style={{ fontSize: '13px' }}>{r.department}</td>
-                  <td><span className={`status-badge ${urgencyClass(r.urgency)}`}>{r.urgency}</span></td>
-                  <td><span className={`status-badge ${statusClass(r.status)}`}>{r.status}</span></td>
-                  <td style={{ fontSize: '12px', color: '#7a8a9e', whiteSpace: 'nowrap' }}>{fmtDate(r.createdAt)}</td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: 'flex', gap: '5px' }}>
-                      {r.status === 'Pending Review' && <>
-                        <button className="admin-btn-success" title="Accept" onClick={() => handleStatus(r.id, 'Accepted')}><i className="fas fa-check"></i></button>
-                        <button className="admin-btn-danger" title="Reject" onClick={() => handleStatus(r.id, 'Rejected')}><i className="fas fa-times"></i></button>
-                      </>}
-                      <button className="admin-btn-danger" title="Delete" onClick={() => handleDelete(r.id)}><i className="fas fa-trash"></i></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {selected && (
-        <div className="modal-overlay" onClick={() => setSelected(null)}>
-          <div className="modal-box" style={{ maxWidth: '600px', maxHeight: '80vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ color: '#0f3b5e' }}><i className="fas fa-hospital-user" style={{ color: '#078930' }}></i> {selected.id}</h3>
-              <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#7a8a9e' }}>✕</button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-              {[['Patient', selected.patientName], ['Patient ID', selected.patientId], ['Age / Gender', `${selected.patientAge} / ${selected.patientGender}`],
-                ['Location', selected.patientLocation], ['Sending Hospital', selected.sendingHospitalName], ['Receiving Hospital', selected.receivingHospitalName],
-                ['Doctor', selected.sendingDoctor], ['Department', selected.department], ['Urgency', selected.urgency], ['Contact', selected.contactPhone],
-                ['Status', selected.status], ['Created', fmtDate(selected.createdAt)]].map(([l, v]) => (
-                <div key={l} className="admin-detail-row"><div className="admin-detail-label">{l}</div><div className="admin-detail-value">{v}</div></div>
-              ))}
-            </div>
-            <div style={{ marginBottom: '12px' }}><div className="admin-detail-label" style={{ marginBottom: '4px' }}>Reason for Referral</div><div className="admin-detail-block">{selected.reasonForReferral}</div></div>
-            {selected.clinicalSummary && <div style={{ marginBottom: '16px' }}><div className="admin-detail-label" style={{ marginBottom: '4px' }}>Clinical Summary</div><div className="admin-detail-block">{selected.clinicalSummary}</div></div>}
-            {selected.status === 'Pending Review' && (
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                <button className="btn btn-success" style={{ flex: 1 }} onClick={() => handleStatus(selected.id, 'Accepted')}><i className="fas fa-check"></i> Accept</button>
-                <button className="btn" style={{ flex: 1, background: '#da121a', color: '#fff' }} onClick={() => handleStatus(selected.id, 'Rejected')}><i className="fas fa-times"></i> Reject</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // --- Financial Tab ---
 function FinancialTab() {
   const [cases, setCases] = useState([]);
@@ -1179,7 +1064,6 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
     { id: 'dashboard', label: 'Dashboard',  icon: 'fas fa-tachometer-alt' },
     { id: 'documents', label: 'Documents',  icon: 'fas fa-file-medical', badge: stats?.pendingDocuments || null },
     { id: 'users',     label: 'Users',      icon: 'fas fa-users' },
-    { id: 'referrals', label: 'Referrals',  icon: 'fas fa-hospital-user', badge: stats?.pendingReferrals || null },
     { id: 'financial', label: 'Financials', icon: 'fas fa-hand-holding-heart' },
     { id: 'hospitals', label: 'Hospitals',  icon: 'fas fa-hospital' },
     { id: 'queue',     label: 'Queue',      icon: 'fas fa-list-ol' },
@@ -1229,7 +1113,6 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
         {activeTab === 'dashboard' && <DashboardTab stats={stats} log={log} />}
         {activeTab === 'documents' && <DocumentsTab />}
         {activeTab === 'users'     && <UsersTab />}
-        {activeTab === 'referrals' && <ReferralsTab />}
         {activeTab === 'financial' && <FinancialTab />}
         {activeTab === 'hospitals' && <HospitalsTab />}
         {activeTab === 'queue'     && <QueueTab />}

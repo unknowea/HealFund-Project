@@ -15,7 +15,6 @@ const appointmentSchema = new mongoose.Schema(
       default: 'Pending',
     },
     queueToken: { type: String },
-    referralId: { type: String },
   },
   { timestamps: true }
 );

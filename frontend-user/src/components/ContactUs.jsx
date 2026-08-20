@@ -112,7 +112,6 @@ export default function ContactUs({ currentLang }) {
                   <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1px solid #d0dbe8', fontSize: '14px', background: '#f8fafc' }}>
                     <option value="General Inquiry">{isAm ? 'አጠቃላይ ጥያቄ' : 'General Inquiry'}</option>
                     <option value="Medical File Verification">{isAm ? 'ፋይል ማረጋገጫ' : 'Medical File Verification'}</option>
-                    <option value="Hospital Referral">{isAm ? 'ሆስፒታል ሪፈራል' : 'Hospital Referral Support'}</option>
                     <option value="Financial Assistance">{isAm ? 'የህክምና ፈንድ' : 'Financial Aid Inquiry'}</option>
                     <option value="Community Agent">{isAm ? 'ወኪል ጥያቄ' : 'Community Agent Request'}</option>
                   </select>

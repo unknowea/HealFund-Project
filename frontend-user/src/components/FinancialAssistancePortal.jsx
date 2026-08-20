@@ -90,12 +90,12 @@ export default function FinancialAssistancePortal({ currentLang }) {
       <div className="card" style={{ background: '#fafcff', border: '1px solid #e2eaf3' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
           <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #d0dbe8' }}>
-            <h4 style={{ color: '#078930', marginBottom: '4px' }}><i className="fas fa-check-circle"></i> Stage 1 — Hospital Referral Verification</h4>
-            <p style={{ fontSize: '13px', color: '#5e6f82', margin: 0 }}>Primary health center issues an official referral to Zewditu Memorial Hospital.</p>
+            <h4 style={{ color: '#078930', marginBottom: '4px' }}><i className="fas fa-check-circle"></i> Stage 1 — Medical Record Verification</h4>
+            <p style={{ fontSize: '13px', color: '#5e6f82', margin: 0 }}>Primary health center submits verified medical records to the receiving hospital.</p>
           </div>
           <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #d0dbe8' }}>
             <h4 style={{ color: '#078930', marginBottom: '4px' }}><i className="fas fa-user-check"></i> Stage 2 — Financial Need Verification</h4>
-            <p style={{ fontSize: '13px', color: '#5e6f82', margin: 0 }}>Zewditu evaluates clinical necessity and approves public support for patients.</p>
+            <p style={{ fontSize: '13px', color: '#5e6f82', margin: 0 }}>The hospital social work team evaluates clinical necessity and approves public support for patients.</p>
           </div>
         </div>
       </div>

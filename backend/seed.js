@@ -1,7 +1,6 @@
 /**
  * HealFund Database Seeder
  * Run: node seed.js
- * Seeds hospitals, admin/staff users, referrals, financial cases, queue, and messages.
  */
 
 import 'dotenv/config';
@@ -11,7 +10,6 @@ import connectDB from './config/db.js';
 
 import Hospital from './models/Hospital.js';
 import User from './models/User.js';
-import Referral from './models/Referral.js';
 import Appointment from './models/Appointment.js';
 import Queue from './models/Queue.js';
 import FinancialCase from './models/FinancialCase.js';
@@ -23,7 +21,6 @@ await connectDB();
 await Promise.all([
   Hospital.deleteMany(),
   User.deleteMany(),
-  Referral.deleteMany(),
   Appointment.deleteMany(),
   Queue.deleteMany(),
   FinancialCase.deleteMany(),
@@ -114,55 +111,6 @@ const users = await User.insertMany([
 ]);
 console.log(`✅ Seeded ${users.length} users`);
 
-// ─── REFERRALS ─────────────────────────────────────────────────────────────────
-const referrals = await Referral.insertMany([
-  {
-    referralId: 'REF-2026-00452',
-    patientName: 'Ahmed Kamara',
-    patientId: 'HF-0247',
-    patientAge: 42,
-    patientGender: 'Male',
-    patientLocation: 'Addis Ababa, Lideta',
-    sendingHospitalId: 'HOSP-002',
-    sendingHospitalName: 'Lideta Health Center',
-    sendingDoctor: 'Dr. Tadesse Bekele',
-    receivingHospitalId: 'HOSP-001',
-    receivingHospitalName: 'Zewditu Memorial Hospital',
-    department: 'Cardiology',
-    urgency: 'High',
-    reasonForReferral: 'Severe hypertensive heart failure with pulmonary congestion requiring specialized echocardiography and ICU monitoring.',
-    clinicalSummary: 'Patient presented with shortness of breath (NYHA Class III) and blood pressure 180/110 mmHg.',
-    documents: ['ECG_Report_0247.pdf', 'Lab_Results_Lideta.pdf'],
-    contactPhone: '+251921198350',
-    status: 'Accepted',
-    acceptedAt: new Date('2026-08-11T14:15:00Z'),
-    assignedDoctor: 'Dr. M. Worku',
-    queueToken: 'C-023',
-    appointmentTime: new Date('2026-08-25T10:00:00Z'),
-  },
-  {
-    referralId: 'REF-2026-00489',
-    patientName: 'Bethlehem Alemu',
-    patientId: 'HF-0312',
-    patientAge: 29,
-    patientGender: 'Female',
-    patientLocation: 'Addis Ababa, Bole',
-    sendingHospitalId: 'HOSP-002',
-    sendingHospitalName: 'Lideta Health Center',
-    sendingDoctor: 'Dr. Helen Wolde',
-    receivingHospitalId: 'HOSP-001',
-    receivingHospitalName: 'Zewditu Memorial Hospital',
-    department: 'General Surgery',
-    urgency: 'Medium',
-    reasonForReferral: 'Symptomatic cholelithiasis with recurrent biliary colic.',
-    clinicalSummary: 'Ultrasound confirmed gallstones. Recommended elective laparoscopic cholecystectomy.',
-    documents: ['Ultrasound_Report.pdf'],
-    contactPhone: '+251911445566',
-    status: 'Pending Review',
-  },
-]);
-console.log(`✅ Seeded ${referrals.length} referrals`);
-
 // ─── QUEUE ─────────────────────────────────────────────────────────────────────
 const queue = await Queue.insertMany([
   {
@@ -174,7 +122,7 @@ const queue = await Queue.insertMany([
     estimatedTime: new Date('2026-08-25T10:00:00Z'),
     status: 'Scheduled',
     urgency: 'High',
-    requiredDocuments: ['Referral Letter REF-2026-00452', 'ID / QR Card', 'Lab Reports'],
+    requiredDocuments: ['Medical Records', 'ID / QR Card', 'Lab Reports'],
   },
   {
     token: 'C-024',
@@ -185,7 +133,7 @@ const queue = await Queue.insertMany([
     estimatedTime: new Date('2026-08-25T10:30:00Z'),
     status: 'Waiting',
     urgency: 'Medium',
-    requiredDocuments: ['Referral Letter', 'ID / QR Card'],
+    requiredDocuments: ['Medical Records', 'ID / QR Card'],
   },
 ]);
 console.log(`✅ Seeded ${queue.length} queue items`);
@@ -202,7 +150,6 @@ const appointments = await Appointment.insertMany([
     datetime: new Date('2026-08-25T10:00:00Z'),
     status: 'Confirmed',
     queueToken: 'C-023',
-    referralId: 'REF-2026-00452',
   },
   {
     appointmentId: 'APT-1002',
@@ -227,10 +174,9 @@ const financialCases = await FinancialCase.insertMany([
     age: 42,
     location: 'Addis Ababa, Lideta',
     diagnosis: 'Severe Hypertensive Heart Failure & Valve Procedure',
-    referralId: 'REF-2026-00452',
     verifyingHospital: 'Zewditu Memorial Hospital',
     verifiedByDoctor: 'Dr. M. Worku (Head of Cardiology)',
-    verificationStage1: 'Referral Verified (Lideta HC → Zewditu)',
+    verificationStage1: 'Medical Records Verified (Lideta HC → Zewditu)',
     verificationStage2: 'Financial Need Verified by Zewditu Social Work Unit',
     targetAmount: 85000,
     raisedAmount: 54200,
@@ -246,10 +192,9 @@ const financialCases = await FinancialCase.insertMany([
     age: 8,
     location: 'Adama, Oromia',
     diagnosis: 'Pediatric Ventricular Septal Defect Repair',
-    referralId: 'REF-2026-00311',
     verifyingHospital: 'Zewditu Memorial Hospital',
     verifiedByDoctor: 'Dr. Abera Tekle',
-    verificationStage1: 'Referral Verified (Adama Hospital → Zewditu)',
+    verificationStage1: 'Medical Records Verified (Adama Hospital → Zewditu)',
     verificationStage2: 'Financial Assistance Approved',
     targetAmount: 120000,
     raisedAmount: 98500,
@@ -275,8 +220,8 @@ const messages = await Message.insertMany([
     messageId: 'MSG-1002',
     name: 'Kassahun Belay',
     contact: 'kassahun.b@ethionet.et',
-    category: 'Hospital Referral',
-    message: 'Inquiring about referral transfer timeline from Tikur Anbessa to Zewditu Memorial Hospital Cardiology clinic.',
+    category: 'Medical File Verification',
+    message: 'Inquiring about medical file transfer timeline from Tikur Anbessa to Zewditu Memorial Hospital Cardiology clinic.',
     status: 'Read',
   },
   {

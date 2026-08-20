@@ -13,7 +13,7 @@ export default function AboutUs({ currentLang }) {
         <p style={{ color: '#e0f2fe', fontSize: '15px', maxWidth: '800px', lineHeight: '1.7' }}>
           {isAm
             ? 'ሂል ፈንድ በኢትዮጵያ ውስጥ ያሉ ተጋላጭ ታካሚዎችን፣ የመጀመሪያ ደረጃ ጤና ተቋማትን እና ስፔሻላይዝድ ሆስፒታሎችን በማገናኘት ፈጣን፣ አስተማማኝና ፍትሃዊ የጤና አገልግሎት የሚያረጋግጥ ፈር ቀዳጅ ዲጂታል መድረክ ነው።'
-            : 'HealFund is a pioneering healthcare access and verification platform in Ethiopia designed to connect vulnerable patients, primary health centers, and referral hospitals with transparent verification, live queue tracking, and emergency financial support.'}
+            : 'HealFund is a pioneering healthcare access and verification platform in Ethiopia designed to connect vulnerable patients, primary health centers, and hospitals with transparent verification, live queue tracking, and emergency financial support.'}
         </p>
       </div>
 
@@ -25,8 +25,8 @@ export default function AboutUs({ currentLang }) {
           </div>
           <p style={{ color: '#4a5a6e', fontSize: '15px', lineHeight: '1.7' }}>
             {isAm
-              ? 'የህክምና ሰነዶችን በቅድሚያ በማረጋገጥ፣ የሪፈራል ሂደቶችን በማቀላጠፍ እና የገንዘብ እጥረት ያለባቸውን ወገኖች ከህክምና ፈንድ ጋር በማስተሳሰር የጤና አገልግሎት ክፍተትን መዝጋት።'
-              : 'To eliminate systemic healthcare delays by streamlining medical file verification, digitizing clinic-to-hospital referrals, and facilitating transparent clinical crowdfunding for patients in urgent need.'}
+              ? 'የህክምና ሰነዶችን በቅድሚያ በማረጋገጥ፣ የቀጠሮ ሂደቶችን በማቀላጠፍ እና የገንዘብ እጥረት ያለባቸውን ወገኖች ከህክምና ፈንድ ጋር በማስተሳሰር የጤና አገልግሎት ክፍተትን መዝጋት።'
+              : 'To eliminate systemic healthcare delays by streamlining medical file verification, digitizing appointment scheduling, and facilitating transparent clinical crowdfunding for patients in urgent need.'}
           </p>
         </div>
 
@@ -59,12 +59,12 @@ export default function AboutUs({ currentLang }) {
           </div>
 
           <div className="feature-card">
-            <i className="fas fa-hospital-user" style={{ fontSize: '32px', color: '#0f3b5e', marginBottom: '12px' }}></i>
-            <h4>{isAm ? 'ቀጥታ የሆስፒታል ሪፈራል' : 'Direct Hospital Referrals'}</h4>
+            <i className="fas fa-stream" style={{ fontSize: '32px', color: '#0f3b5e', marginBottom: '12px' }}></i>
+            <h4>{isAm ? 'ቀጥታ ተራ እና ቀጠሮ' : 'Live Queue & Appointments'}</h4>
             <p style={{ fontSize: '13.5px', color: '#4a5a6e' }}>
               {isAm
-                ? 'የመጀመሪያ ደረጃ ጤና ጣቢያዎች ታካሚዎችን በቀጥታ ወደ ዘውዲቱ መታሰቢያ ሆስፒታል ያስተላልፋሉ።'
-                : 'Primary health centers securely transmit clinical referrals directly to specialized departments at Zewditu Memorial Hospital.'}
+                ? 'ታካሚዎች የZewditu Memorial Hospital ተራን እና የቀጠሮ ሁኔታቸውን በቀጥታ ይከታተላሉ።'
+                : 'Patients track live queue status and appointment schedules at Zewditu Memorial Hospital in real time.'}
             </p>
           </div>
 
@@ -113,7 +113,7 @@ export default function AboutUs({ currentLang }) {
             <p style={{ color: '#4a5a6e', fontSize: '14px', margin: 0 }}>
               {isAm
                 ? 'ሂል ፈንድ የታካሚዎችን የሕክምና ሰነዶች፣ የቀዶ ጥገና ሪፈራሎች እና የድጋፍ ጉዳዮች የሚቀበለው እና የሚያረጋግጠው በልዩ ሁኔታ ከአዲስ አበባው ዘውዲቱ መታሰቢያ ሆስፒታል ክሊኒካዊ ቦርድ ጋር ብቻ ነው።'
-                : 'HealFund operates exclusively with Zewditu Memorial Hospital in Addis Ababa for all medical document intake, surgical referral triaging, live queue scheduling, and clinical verifications.'}
+                : 'HealFund operates exclusively with Zewditu Memorial Hospital in Addis Ababa for all medical document intake, appointment scheduling, live queue management, and clinical verifications.'}
             </p>
           </div>
         </div>

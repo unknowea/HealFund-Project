@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { getAppointments, createAppointment, uploadFile, sendMessage, getProfile, updateProfile } from '../api.js';
+import { getAppointments, createAppointment, uploadFile, sendMessage, getProfile, updateProfile, getPublicStats } from '../api.js';
 
 export default function PatientPortal({
   currentLang, currentUser, onOpenAuth,
@@ -19,6 +19,7 @@ export default function PatientPortal({
   const [uploadStatus, setUploadStatus] = useState('');
   const [modalMessage, setModalMessage] = useState(null);
   const canvasRef = useRef(null);
+  const [homeStats, setHomeStats] = useState({ patients: '…', verification: '…', centers: '…' });
 
   // Profile editing state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -31,12 +32,25 @@ export default function PatientPortal({
   const [profileMsg, setProfileMsg] = useState('');
 
   const defaultUser = currentUser || {
-    name: 'Ahmed Kamara', patientId: 'HF-0247',
-    registered: '12 Aug 2026', gender: 'Male', age: 42,
-    location: 'Addis Ababa, Lideta', status: 'Verified',
+    name: '', patientId: '',
+    registered: '', gender: '', age: '',
+    location: '', status: 'Pending',
   };
 
   const isAm = currentLang === 'am';
+
+  // Fetch public stats for home page
+  useEffect(() => {
+    getPublicStats().then((data) => {
+      if (data.success) {
+        setHomeStats({
+          patients: data.stats.totalUsers.toLocaleString(),
+          centers: data.stats.totalHospitals.toLocaleString(),
+          cases: data.stats.totalFinancialCases.toLocaleString(),
+        });
+      }
+    }).catch(() => {});
+  }, []);
 
   // Open profile editor — pre-fill fields
   const openProfileEdit = () => {
@@ -150,7 +164,7 @@ export default function PatientPortal({
       const data = await createAppointment({
         patientId: defaultUser.patientId,
         patientName: defaultUser.name,
-        department: 'General Medicine',
+        department: 'General',
         datetime: timeStr,
       });
       setAppointmentsList([data.appointment, ...appointmentsList]);
@@ -192,9 +206,9 @@ export default function PatientPortal({
             <div className="feature-card"><i className="fas fa-mobile-alt"></i><h4>{isAm ? 'ኦፍላይን መዳረሻ' : 'Offline & Phone Access'}</h4><p>{isAm ? '*677# ወይም የድምፅ ጥሪ ይጠቀሙ።' : 'Use USSD (*677#) or call our support line.'}</p></div>
           </div>
           <div className="stats-row">
-            <div className="stat-item"><h2>1,247</h2><p>{isAm ? 'ተመዝጋቢ ታካሚዎች' : 'Patients Registered'}</p></div>
-            <div className="stat-item"><h2>98%</h2><p>{isAm ? 'የማረጋገጫ መጠን' : 'Verification Rate'}</p></div>
-            <div className="stat-item"><h2>32</h2><p>{isAm ? 'አጋር ጤና ተቋማት' : 'Partner Health Centers'}</p></div>
+            <div className="stat-item"><h2>{homeStats.patients}</h2><p>{isAm ? 'ተመዝጋቢ ታካሚዎች' : 'Patients Registered'}</p></div>
+            <div className="stat-item"><h2>{homeStats.centers}</h2><p>{isAm ? 'አጋር ጤና ተቋማት' : 'Partner Health Centers'}</p></div>
+            <div className="stat-item"><h2>{homeStats.cases || '…'}</h2><p>{isAm ? 'ፋይናንሺያል ጉዳዮች' : 'Active Financial Cases'}</p></div>
           </div>
         </div>
       )}

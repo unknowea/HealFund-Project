@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import AuthModal from './components/AuthModal';
 import AdminPortal from './components/AdminPortal';
-import ReferralPortal from './components/ReferralPortal';
 import QueuePortal from './components/QueuePortal';
 
 export default function App() {
@@ -50,13 +49,7 @@ export default function App() {
       />
 
       <main style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
-        {activeModule === 'referrals' && currentUser ? (
-          <ReferralPortal
-            currentLang={currentLang}
-            currentUser={currentUser}
-            setActiveModule={setActiveModule}
-          />
-        ) : activeModule === 'queue' && currentUser ? (
+        {activeModule === 'queue' && currentUser ? (
           <QueuePortal currentLang={currentLang} currentUser={currentUser} />
         ) : (
           <AdminPortal
@@ -70,7 +63,7 @@ export default function App() {
       </main>
 
       <footer className="footer-note" style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '13px' }}>
-        <i className="fas fa-shield-alt"></i> HealFund Standalone Administration Hub · Zewditu Memorial Hospital Operations
+        <i className="fas fa-shield-alt"></i> HealFund Administration Hub · Zewditu Memorial Hospital Operations
       </footer>
 
       <AuthModal

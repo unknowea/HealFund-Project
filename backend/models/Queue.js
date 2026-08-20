@@ -10,7 +10,7 @@ const queueSchema = new mongoose.Schema(
     estimatedTime: { type: Date },
     status: {
       type: String,
-      enum: ['Scheduled', 'Waiting', 'In Progress', 'Completed', 'No Show'],
+      enum: ['Scheduled', 'Waiting', 'In Progress', 'Completed', 'No Show', 'Cancelled'],
       default: 'Scheduled',
     },
     urgency: {

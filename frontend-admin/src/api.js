@@ -33,21 +33,13 @@ export const getProfile = () =>
 export const updateProfile = (payload) =>
   handle(fetch(`${BASE}/auth/profile`, { method: 'PUT', headers: headers(), body: JSON.stringify(payload) }));
 
+// ─── PUBLIC ────────────────────────────────────────────────────────────────────
+export const getPublicStats = () =>
+  handle(fetch(`${BASE}/public/stats`, { headers: { 'Content-Type': 'application/json' } }));
+
 // ─── HOSPITALS ─────────────────────────────────────────────────────────────────
 export const getHospitals = () =>
   handle(fetch(`${BASE}/hospitals`, { headers: headers() }));
-
-// ─── REFERRALS ─────────────────────────────────────────────────────────────────
-export const getReferrals = (params = {}) => {
-  const q = new URLSearchParams(params).toString();
-  return handle(fetch(`${BASE}/referrals${q ? '?' + q : ''}`, { headers: headers() }));
-};
-
-export const createReferral = (payload) =>
-  handle(fetch(`${BASE}/referrals`, { method: 'POST', headers: headers(), body: JSON.stringify(payload) }));
-
-export const updateReferralStatus = (id, payload) =>
-  handle(fetch(`${BASE}/referrals/${id}/status`, { method: 'PUT', headers: headers(), body: JSON.stringify(payload) }));
 
 // ─── APPOINTMENTS ──────────────────────────────────────────────────────────────
 export const getAppointments = (params = {}) => {

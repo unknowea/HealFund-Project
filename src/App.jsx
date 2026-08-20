@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import Navbar from './components/Navbar';
 import AuthModal from './components/AuthModal';
 import PatientPortal from './components/PatientPortal';
-import ReferralPortal from './components/ReferralPortal';
 import QueuePortal from './components/QueuePortal';
 import FinancialAssistancePortal from './components/FinancialAssistancePortal';
 import AboutUs from './components/AboutUs';
@@ -24,7 +23,7 @@ export default function App() {
     setActiveModule('dashboard');
   };
 
-  const isProtectedRoute = ['dashboard', 'appointments', 'files', 'referral', 'queue'].includes(activeModule);
+  const isProtectedRoute = ['dashboard', 'appointments', 'files', 'queue'].includes(activeModule);
 
   return (
     <div className="app-container">
@@ -62,8 +61,8 @@ export default function App() {
             </h2>
             <p style={{ color: '#4a5a6e', fontSize: '15px', maxWidth: '500px', margin: '0 auto 24px auto' }}>
               {currentLang === 'am'
-                ? 'የታካሚ ዳሽቦርድ፣ ቀጠሮዎች፣ ፋይሎች፣ ሪፈራል እና ተራ መረጃዎችን ለማግኘት እባክዎ ወደ ሂል ፈንድ አካውንትዎ ይግቡ።'
-                : 'Please log in to access your Patient Dashboard, Appointment schedule, Verified Medical Files, Hospital Referrals, and Live Queue.'}
+                ? 'የታካሚ ዳሽቦርድ፣ ቀጠሮዎች፣ ፋይሎች እና ተራ መረጃዎችን ለማግኘት እባክዎ ወደ ሂል ፈንድ አካውንትዎ ይግቡ።'
+                : 'Please log in to access your Patient Dashboard, Appointment schedule, Verified Medical Files, and Live Queue.'}
             </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
               <button className="btn btn-primary" onClick={() => setIsAuthOpen(true)}>
@@ -83,14 +82,6 @@ export default function App() {
                 onOpenAuth={() => setIsAuthOpen(true)}
                 activeTab={activeModule === 'patient' ? 'home' : activeModule}
                 setActiveTab={setActiveModule}
-                setActiveModule={setActiveModule}
-              />
-            )}
-
-            {activeModule === 'referral' && (
-              <ReferralPortal
-                currentLang={currentLang}
-                currentUser={currentUser}
                 setActiveModule={setActiveModule}
               />
             )}

@@ -32,7 +32,7 @@ router.get('/:id', protect, async (req, res) => {
 // POST /api/appointments — protected
 router.post('/', protect, async (req, res) => {
   try {
-    const { patientId, patientName, department, datetime } = req.body;
+    const { patientId, patientName, hospitalName, doctorName, department, datetime } = req.body;
     if (!patientId || !datetime)
       return res.status(400).json({ success: false, message: 'patientId and datetime are required' });
 
@@ -43,9 +43,9 @@ router.post('/', protect, async (req, res) => {
     const appointment = await Appointment.create({
       patientId,
       patientName: patientName || 'Patient',
-      hospitalName: 'Zewditu Memorial Hospital',
-      doctorName: 'Dr. M. Worku',
-      department: department || 'General Medicine',
+      hospitalName: hospitalName || 'Zewditu Memorial Hospital',
+      doctorName: doctorName || 'Assigned Doctor',
+      department: department || 'General',
       datetime: new Date(datetime),
       status: 'Confirmed',
       queueToken,

@@ -411,7 +411,7 @@ export default function PatientPortal({
               <label><i className="fas fa-tags" style={{ color: '#078930' }}></i> {isAm ? 'የሰነድ ዓይነት' : 'Document Privacy Category'}</label>
               <select value={fileCategory} onChange={(e) => setFileCategory(e.target.value)} style={{ padding: '9px', fontSize: '14px', borderRadius: '8px', border: '1px solid #d0dbe8', width: '100%' }}>
                 <option value="Privacy & Diagnostic Report">Privacy & Diagnostic Report (ECG, Lab, X-Ray)</option>
-                <option value="Confidential Health File">Confidential Health File (Doctor Referral / Clinical Summary)</option>
+                <option value="Confidential Health File">Confidential Health File (Clinical Summary)</option>
                 <option value="Government ID / Financial Proof">Government ID / Financial Proof</option>
               </select>
             </div>
