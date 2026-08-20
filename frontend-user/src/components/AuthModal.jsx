@@ -43,6 +43,22 @@ const validatePassword = (pwd) => {
   return { hasLetter, hasNumber, hasSpecial, isLong, valid: hasLetter && hasNumber && hasSpecial && isLong };
 };
 
+// Reusable Password Input with Show/Hide toggle
+const PasswordInput = ({ value, onChange, show, setShow, placeholder, id }) => (
+  <div style={{ position: 'relative' }}>
+    <input id={id} type={show ? 'text' : 'password'} value={value} onChange={onChange}
+      placeholder={placeholder} required
+      style={{ width: '100%', padding: '10px 40px 10px 14px', border: '1px solid #d0dbe8', borderRadius: '10px', fontSize: '15px', transition: '0.2s', boxSizing: 'border-box' }}
+      onFocus={(e) => { e.target.style.borderColor = '#078930'; e.target.style.boxShadow = '0 0 0 3px rgba(7,137,48,0.1)'; }}
+      onBlur={(e) => { e.target.style.borderColor = '#d0dbe8'; e.target.style.boxShadow = 'none'; }}
+    />
+    <button type="button" onClick={() => setShow(!show)}
+      style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#7a8a9e', fontSize: '15px', padding: '4px' }}>
+      <i className={`fas ${show ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+    </button>
+  </div>
+);
+
 export default function AuthModal({ isOpen, onClose, onLoginSuccess, currentLang }) {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
@@ -129,20 +145,6 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, currentLang
   const strengthColor = ['#ddd', '#da121a', '#f59e0b', '#078930', '#078930'][strengthScore];
   const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong'][strengthScore];
 
-  const PasswordInput = ({ value, onChange, show, setShow, placeholder, id }) => (
-    <div style={{ position: 'relative' }}>
-      <input id={id} type={show ? 'text' : 'password'} value={value} onChange={onChange}
-        placeholder={placeholder} required
-        style={{ width: '100%', padding: '10px 40px 10px 14px', border: '1px solid #d0dbe8', borderRadius: '10px', fontSize: '15px', transition: '0.2s', boxSizing: 'border-box' }}
-        onFocus={(e) => { e.target.style.borderColor = '#078930'; e.target.style.boxShadow = '0 0 0 3px rgba(7,137,48,0.1)'; }}
-        onBlur={(e) => { e.target.style.borderColor = '#d0dbe8'; e.target.style.boxShadow = 'none'; }}
-      />
-      <button type="button" onClick={() => setShow(!show)}
-        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#7a8a9e', fontSize: '15px', padding: '4px' }}>
-        <i className={`fas ${show ? 'fa-eye-slash' : 'fa-eye'}`}></i>
-      </button>
-    </div>
-  );
 
   return (
     <div className="modal-overlay">

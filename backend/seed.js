@@ -179,11 +179,11 @@ const financialCases = await FinancialCase.insertMany([
     verificationStage1: 'Medical Records Verified (Lideta HC → Zewditu)',
     verificationStage2: 'Financial Need Verified by Zewditu Social Work Unit',
     targetAmount: 85000,
-    raisedAmount: 54200,
+    raisedAmount: 0,
     currency: 'ETB',
     description: 'Ahmed is a 42-year-old father of three suffering from acute hypertensive heart failure requiring specialized interventional cardiac care.',
     status: 'Active',
-    donorsCount: 142,
+    donorsCount: 0,
   },
   {
     caseId: 'CASE-2026-8805',
@@ -197,11 +197,11 @@ const financialCases = await FinancialCase.insertMany([
     verificationStage1: 'Medical Records Verified (Adama Hospital → Zewditu)',
     verificationStage2: 'Financial Assistance Approved',
     targetAmount: 120000,
-    raisedAmount: 98500,
+    raisedAmount: 0,
     currency: 'ETB',
     description: 'Tigist is an 8-year-old student referred from Adama for congenital heart defect corrective surgery.',
     status: 'Active',
-    donorsCount: 310,
+    donorsCount: 0,
   },
 ]);
 console.log(`✅ Seeded ${financialCases.length} financial cases`);

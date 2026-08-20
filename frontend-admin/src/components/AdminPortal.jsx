@@ -2,8 +2,17 @@ import React, { useState, useEffect } from 'react';
 import WhatsAppMessaging from './WhatsAppMessaging';
 
 // --- API Helper ---
-const API = (path, opts) =>
-  fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('healfund_token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+const API = (path, opts = {}) => {
+  const { headers: extraHeaders, ...rest } = opts;
+  return fetch(path, { headers: { ...getAuthHeaders(), ...extraHeaders }, ...rest });
+};
 
 const fmt = (n) => Number(n || 0).toLocaleString();
 const fmtDate = (iso) => {
@@ -106,9 +115,9 @@ function DashboardTab({ stats, log }) {
   return (
     <div>
       <div className="admin-stats-grid">
-        <StatCard icon="fas fa-users" label="Registered Users" value={fmt(stats.totalUsers)} color="#078930" />
-        <StatCard icon="fas fa-file-medical" label="Documents" value={fmt(stats.totalDocuments)} color="#6f42c1" sub={`${stats.pendingDocuments} awaiting review`} />
-        <StatCard icon="fas fa-hand-holding-heart" label="Financial Cases" value={fmt(stats.totalFinancialCases)} color="#e07b00" sub={`${fmt(stats.totalDonors)} donors`} />
+        <StatCard icon="fas fa-users" label="Registered Patients" value={fmt(stats.totalUsers)} color="#078930" />
+        <StatCard icon="fas fa-file-medical" label="Uploaded Documents" value={fmt(stats.totalDocuments)} color="#6f42c1" sub={stats.totalDocuments === 0 ? 'No files uploaded yet' : `${stats.pendingDocuments} awaiting review`} />
+        <StatCard icon="fas fa-hand-holding-heart" label="Financial Cases" value={fmt(stats.totalFinancialCases)} color="#e07b00" sub={`${fmt(stats.totalDonors)} total donors`} />
         <StatCard icon="fas fa-calendar-check" label="Appointments" value={fmt(stats.totalAppointments)} color="#078930" />
         <StatCard icon="fas fa-hospital" label="Hospitals" value={fmt(stats.totalHospitals)} color="#078930" />
       </div>
@@ -1043,7 +1052,9 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
       const lData = await lRes.json();
       if (sData.success) setStats(sData.stats);
       if (lData.success) setLog(lData.log);
-    } catch { /* server may not be running */ }
+    } catch (err) {
+      console.error('[Dashboard] Failed to load stats:', err.message || err);
+    }
   };
 
   const handleLogin = (user) => {
