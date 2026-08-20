@@ -86,126 +86,6 @@ app.get('/api/hospitals', (req, res) => {
   res.json({ success: true, hospitals: dataStore.hospitals });
 });
 
-// --- REFERRALS (Hospital-to-Hospital) ---
-app.get('/api/referrals', (req, res) => {
-  const { sendingHospitalId, receivingHospitalId, patientId } = req.query;
-  let list = dataStore.referrals;
-
-  if (sendingHospitalId) {
-    list = list.filter((r) => r.sendingHospitalId === sendingHospitalId);
-  }
-  if (receivingHospitalId) {
-    list = list.filter((r) => r.receivingHospitalId === receivingHospitalId);
-  }
-  if (patientId) {
-    list = list.filter((r) => r.patientId === patientId);
-  }
-
-  res.json({ success: true, referrals: list });
-});
-
-app.post('/api/referrals', (req, res) => {
-  const {
-    patientName,
-    patientId,
-    patientAge,
-    patientGender,
-    patientLocation,
-    sendingHospitalId,
-    receivingHospitalId,
-    department,
-    urgency,
-    reasonForReferral,
-    clinicalSummary,
-    contactPhone,
-    documents,
-  } = req.body;
-
-  if (!patientName || !sendingHospitalId || !receivingHospitalId || !department || !reasonForReferral) {
-    return res.status(400).json({ success: false, message: 'Missing required referral fields' });
-  }
-
-  const sendingHosp = dataStore.hospitals.find((h) => h.id === sendingHospitalId) || { name: 'Referring Health Center' };
-  const receivingHosp = { id: 'HOSP-001', name: 'Zewditu Memorial Hospital' };
-
-  const refNumber = String(dataStore.referrals.length + 453).padStart(5, '0');
-  const newReferral = {
-    id: `REF-2026-${refNumber}`,
-    patientName,
-    patientId: patientId || `HF-${Math.floor(1000 + Math.random() * 9000)}`,
-    patientAge: parseInt(patientAge) || 30,
-    patientGender: patientGender || 'Other',
-    patientLocation: patientLocation || 'Addis Ababa',
-    sendingHospitalId,
-    sendingHospitalName: sendingHosp.name,
-    sendingDoctor: req.body.sendingDoctor || 'Authorized Officer',
-    receivingHospitalId: 'HOSP-001',
-    receivingHospitalName: 'Zewditu Memorial Hospital',
-    department,
-    urgency: urgency || 'Medium',
-    reasonForReferral,
-    clinicalSummary: clinicalSummary || 'Referred for specialized tertiary evaluation.',
-    documents: documents || [],
-    contactPhone: contactPhone || '+251900000000',
-    status: 'Pending Review',
-    createdAt: new Date().toISOString(),
-  };
-
-  dataStore.referrals.unshift(newReferral);
-  res.json({ success: true, referral: newReferral });
-});
-
-app.put('/api/referrals/:id/status', (req, res) => {
-  const { id } = req.params;
-  const { status, assignedDoctor, appointmentTime } = req.body;
-
-  const referral = dataStore.referrals.find((r) => r.id === id);
-  if (!referral) {
-    return res.status(404).json({ success: false, message: 'Referral not found' });
-  }
-
-  referral.status = status;
-  if (status === 'Accepted') {
-    referral.acceptedAt = new Date().toISOString();
-    referral.assignedDoctor = assignedDoctor || 'Dr. M. Worku';
-    
-    // Generate queue token
-    const tokenNum = String(dataStore.queue.length + 24).padStart(3, '0');
-    const queueToken = `C-${tokenNum}`;
-    referral.queueToken = queueToken;
-    referral.appointmentTime = appointmentTime || '2026-08-25T10:00:00Z';
-
-    // Add to appointments
-    dataStore.appointments.unshift({
-      id: `APT-${1000 + dataStore.appointments.length + 1}`,
-      patientId: referral.patientId,
-      patientName: referral.patientName,
-      hospitalName: referral.receivingHospitalName,
-      doctorName: referral.assignedDoctor,
-      department: referral.department,
-      datetime: referral.appointmentTime,
-      status: 'Confirmed',
-      queueToken: queueToken,
-      referralId: referral.id,
-    });
-
-    // Add to queue
-    dataStore.queue.unshift({
-      token: queueToken,
-      patientId: referral.patientId,
-      patientName: referral.patientName,
-      department: `${referral.department} Clinic`,
-      assignedDoctor: referral.assignedDoctor,
-      estimatedTime: referral.appointmentTime,
-      status: 'Scheduled',
-      urgency: referral.urgency,
-      requiredDocuments: [`Referral Letter ${referral.id}`, 'ID / QR Card', 'Lab Reports'],
-    });
-  }
-
-  res.json({ success: true, referral });
-});
-
 // --- APPOINTMENTS ---
 app.get('/api/appointments', (req, res) => {
   const { patientId } = req.query;
@@ -417,9 +297,6 @@ app.post('/api/admin/login', (req, res) => {
 // --- ADMIN DASHBOARD STATS ---
 app.get('/api/admin/stats', (req, res) => {
   const totalUsers = Object.keys(dataStore.users).length;
-  const totalReferrals = dataStore.referrals.length;
-  const pendingReferrals = dataStore.referrals.filter((r) => r.status === 'Pending Review').length;
-  const acceptedReferrals = dataStore.referrals.filter((r) => r.status === 'Accepted').length;
   const totalFinancialCases = dataStore.financialCases.length;
   const totalRaised = dataStore.financialCases.reduce((sum, c) => sum + c.raisedAmount, 0);
   const totalTarget = dataStore.financialCases.reduce((sum, c) => sum + c.targetAmount, 0);
@@ -436,9 +313,6 @@ app.get('/api/admin/stats', (req, res) => {
     success: true,
     stats: {
       totalUsers,
-      totalReferrals,
-      pendingReferrals,
-      acceptedReferrals,
       totalFinancialCases,
       totalRaised,
       totalTarget,
@@ -474,18 +348,6 @@ app.delete('/api/admin/users/:email', (req, res) => {
     timestamp: new Date().toISOString(),
   });
   res.json({ success: true, message: 'User deleted' });
-});
-
-// --- ADMIN: ALL REFERRALS (with override) ---
-app.get('/api/admin/referrals', (req, res) => {
-  res.json({ success: true, referrals: dataStore.referrals });
-});
-
-app.delete('/api/admin/referrals/:id', (req, res) => {
-  const idx = dataStore.referrals.findIndex((r) => r.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ success: false, message: 'Not found' });
-  dataStore.referrals.splice(idx, 1);
-  res.json({ success: true });
 });
 
 // --- ADMIN: ALL FINANCIAL CASES ---

@@ -65,7 +65,7 @@ export default function ContactUs({ currentLang }) {
         <p style={{ color: '#e0f2fe', fontSize: '15px', maxWidth: '820px', lineHeight: '1.7', margin: 0 }}>
           {isAm
             ? 'ስለ ሂል ፈንድ ማንኛውም ጥያቄ፣ የህክምና ፋይል ማረጋገጫ ድጋፍ ወይም የሪፈራል እገዛ ካለዎት ከዚህ በታች ያለውን ቅጽ በመጠቀም መልዕክትዎን ይላኩልን። የድጋፍ ቡድናችን በፍጥነት ምላሽ ይሰጥዎታል።'
-            : 'Have questions regarding HealFund, need assistance with medical document verification, or require referral guidance? Send us a message below and our hospital support team will respond promptly.'}
+            : 'Have questions regarding HealFund, need assistance with medical document verification, or require appointment guidance? Send us a message below and our hospital support team will respond promptly.'}
         </p>
       </div>
 
@@ -98,7 +98,7 @@ export default function ContactUs({ currentLang }) {
                 </div>
               </div>
 
-              {/* Central Referral Hospital */}
+              {/* Central Partner Hospital */}
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
                 <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#e7f5eb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#078930', flexShrink: 0, fontSize: '18px' }}>
                   <i className="fas fa-hospital"></i>
@@ -146,7 +146,7 @@ export default function ContactUs({ currentLang }) {
               <p style={{ margin: 0, lineHeight: '1.6' }}>
                 {isAm
                   ? 'ሂል ፈንድ የሕክምና ሰነዶችን፣ የሆስፒታል ሪፈራሎችን እና የታካሚዎች የገንዘብ እርዳታ ጥያቄዎችን የሚቀበለው እና የሚያረጋግጠው በልዩ ሁኔታ ከዘውዲቱ መታሰቢያ ሆስፒታል ጋር ብቻ ነው።'
-                  : 'HealFund accepts and verifies all medical documents, clinic referrals, and financial assistance cases exclusively with Zewditu Memorial Hospital in Addis Ababa.'}
+                  : 'HealFund accepts and verifies all medical documents and financial assistance cases exclusively with Zewditu Memorial Hospital in Addis Ababa.'}
               </p>
               <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px dashed #dbe5ee' }}>
                 <strong>{isAm ? 'ማዕከላዊ ሆስፒታል' : 'Designated Hospital'}:</strong>
@@ -273,7 +273,6 @@ export default function ContactUs({ currentLang }) {
                   >
                     <option value="General Inquiry">{isAm ? 'አጠቃላይ ጥያቄ' : 'General Inquiry'}</option>
                     <option value="Medical File Verification">{isAm ? 'የህክምና ፋይል ማረጋገጫ' : 'Medical File Verification'}</option>
-                    <option value="Hospital Referral">{isAm ? 'የሆስፒታል ሪፈራል ድጋፍ' : 'Hospital Referral Support'}</option>
                     <option value="Financial Assistance">{isAm ? 'የህክምና ፈንድ ጥያቄ' : 'Financial Aid Inquiry'}</option>
                     <option value="Community Agent">{isAm ? 'የመስክ ወኪል ጥያቄ' : 'Community Agent Request'}</option>
                   </select>

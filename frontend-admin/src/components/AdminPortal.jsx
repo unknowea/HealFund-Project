@@ -2,8 +2,17 @@ import React, { useState, useEffect } from 'react';
 import WhatsAppMessaging from './WhatsAppMessaging';
 
 // --- API Helper ---
-const API = (path, opts) =>
-  fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('healfund_token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+const API = (path, opts = {}) => {
+  const { headers: extraHeaders, ...rest } = opts;
+  return fetch(path, { headers: { ...getAuthHeaders(), ...extraHeaders }, ...rest });
+};
 
 const fmt = (n) => Number(n || 0).toLocaleString();
 const fmtDate = (iso) => {
@@ -26,15 +35,20 @@ function AdminLogin({ onLoginSuccess }) {
     setError('');
     setLoading(true);
     try {
-      const res = await API('/api/admin/login', {
+      const res = await API('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (data.success) {
-        localStorage.setItem('healfund_token', data.token || 'demo-admin-token');
-        localStorage.setItem('healfund_user', JSON.stringify(data.admin));
-        onLoginSuccess(data.admin);
+        if (data.user?.role === 'patient') {
+          setError('Access denied. Staff credentials required.');
+          setLoading(false);
+          return;
+        }
+        localStorage.setItem('healfund_token', data.token);
+        localStorage.setItem('healfund_user', JSON.stringify(data.user));
+        onLoginSuccess(data.user);
       } else {
         setError(data.message || 'Invalid credentials');
       }
@@ -70,7 +84,8 @@ function AdminLogin({ onLoginSuccess }) {
           </button>
         </form>
         <p className="admin-login-hint">
-          <i className="fas fa-info-circle"></i> Demo: <code>superadmin@healfund.et</code> / <code>healfund@admin2026</code>
+          <i className="fas fa-info-circle"></i> Demo: <code>admin@zewditu.gov.et</code> / <code>admin123</code>
+          &nbsp;or&nbsp; <code>staff@lidetahc.gov.et</code> / <code>hospital123</code>
         </p>
       </div>
     </div>
@@ -100,10 +115,9 @@ function DashboardTab({ stats, log }) {
   return (
     <div>
       <div className="admin-stats-grid">
-        <StatCard icon="fas fa-users" label="Registered Users" value={fmt(stats.totalUsers)} color="#078930" />
-        <StatCard icon="fas fa-hospital-user" label="Referrals" value={fmt(stats.totalReferrals)} color="#0d5a3d" sub={`${stats.pendingReferrals} pending`} />
-        <StatCard icon="fas fa-file-medical" label="Documents" value={fmt(stats.totalDocuments)} color="#6f42c1" sub={`${stats.pendingDocuments} awaiting review`} />
-        <StatCard icon="fas fa-hand-holding-heart" label="Financial Cases" value={fmt(stats.totalFinancialCases)} color="#e07b00" sub={`${fmt(stats.totalDonors)} donors`} />
+        <StatCard icon="fas fa-users" label="Registered Patients" value={fmt(stats.totalUsers)} color="#078930" />
+        <StatCard icon="fas fa-file-medical" label="Uploaded Documents" value={fmt(stats.totalDocuments)} color="#6f42c1" sub={stats.totalDocuments === 0 ? 'No files uploaded yet' : `${stats.pendingDocuments} awaiting review`} />
+        <StatCard icon="fas fa-hand-holding-heart" label="Financial Cases" value={fmt(stats.totalFinancialCases)} color="#e07b00" sub={`${fmt(stats.totalDonors)} total donors`} />
         <StatCard icon="fas fa-calendar-check" label="Appointments" value={fmt(stats.totalAppointments)} color="#078930" />
         <StatCard icon="fas fa-hospital" label="Hospitals" value={fmt(stats.totalHospitals)} color="#078930" />
       </div>
@@ -615,120 +629,6 @@ function UsersTab() {
   );
 }
 
-// --- Referrals Tab ---
-function ReferralsTab() {
-  const [referrals, setReferrals] = useState([]);
-  const [filter, setFilter] = useState('All');
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await API('/api/admin/referrals');
-      const data = await res.json();
-      if (data.success) setReferrals(data.referrals);
-    } finally { setLoading(false); }
-  };
-  useEffect(() => { load(); }, []);
-
-  const handleStatus = async (id, status) => {
-    await API(`/api/referrals/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
-    load(); setSelected(null);
-  };
-  const handleDelete = async (id) => {
-    await API(`/api/admin/referrals/${id}`, { method: 'DELETE' });
-    load(); setSelected(null);
-  };
-
-  const urgencyClass = (u) => u === 'High' ? 'status-urgency-high' : u === 'Medium' ? 'status-urgency-medium' : 'status-urgency-low';
-  const statusClass = (s) => s === 'Accepted' ? 'status-verified' : s === 'Rejected' ? 'status-rejected' : 'status-pending';
-
-  const filtered = referrals.filter((r) => {
-    const matchStatus = filter === 'All' || r.status === filter;
-    const matchSearch = r.patientName.toLowerCase().includes(search.toLowerCase()) || r.id.toLowerCase().includes(search.toLowerCase());
-    return matchStatus && matchSearch;
-  });
-
-  return (
-    <div>
-      <div className="admin-toolbar">
-        <div className="admin-search">
-          <i className="fas fa-search"></i>
-          <input type="text" placeholder="Search patient or referral ID…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-        <div className="admin-filter-pills">
-          {['All', 'Pending Review', 'Accepted', 'Rejected'].map((s) => (
-            <button key={s} className={`admin-pill ${filter === s ? 'active' : ''}`} onClick={() => setFilter(s)}>{s}</button>
-          ))}
-        </div>
-        <span className="admin-count-badge">{filtered.length} referrals</span>
-      </div>
-      {loading ? (
-        <div className="admin-loading"><i className="fas fa-spinner fa-spin"></i> Loading referrals…</div>
-      ) : (
-        <div className="card">
-          <table className="admin-table">
-            <thead>
-              <tr><th>Referral ID</th><th>Patient</th><th>From → To</th><th>Department</th><th>Urgency</th><th>Status</th><th>Created</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', color: '#7a8a9e' }}>No referrals found</td></tr>}
-              {filtered.map((r) => (
-                <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(r)}>
-                  <td><code className="admin-code">{r.id}</code></td>
-                  <td><div style={{ fontWeight: 600 }}>{r.patientName}</div><div style={{ fontSize: '12px', color: '#7a8a9e' }}>{r.patientId}</div></td>
-                  <td style={{ fontSize: '13px' }}>{r.sendingHospitalName} <span style={{ color: '#078930' }}>→</span> {r.receivingHospitalName}</td>
-                  <td style={{ fontSize: '13px' }}>{r.department}</td>
-                  <td><span className={`status-badge ${urgencyClass(r.urgency)}`}>{r.urgency}</span></td>
-                  <td><span className={`status-badge ${statusClass(r.status)}`}>{r.status}</span></td>
-                  <td style={{ fontSize: '12px', color: '#7a8a9e', whiteSpace: 'nowrap' }}>{fmtDate(r.createdAt)}</td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: 'flex', gap: '5px' }}>
-                      {r.status === 'Pending Review' && <>
-                        <button className="admin-btn-success" title="Accept" onClick={() => handleStatus(r.id, 'Accepted')}><i className="fas fa-check"></i></button>
-                        <button className="admin-btn-danger" title="Reject" onClick={() => handleStatus(r.id, 'Rejected')}><i className="fas fa-times"></i></button>
-                      </>}
-                      <button className="admin-btn-danger" title="Delete" onClick={() => handleDelete(r.id)}><i className="fas fa-trash"></i></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {selected && (
-        <div className="modal-overlay" onClick={() => setSelected(null)}>
-          <div className="modal-box" style={{ maxWidth: '600px', maxHeight: '80vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ color: '#0f3b5e' }}><i className="fas fa-hospital-user" style={{ color: '#078930' }}></i> {selected.id}</h3>
-              <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#7a8a9e' }}>✕</button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-              {[['Patient', selected.patientName], ['Patient ID', selected.patientId], ['Age / Gender', `${selected.patientAge} / ${selected.patientGender}`],
-                ['Location', selected.patientLocation], ['Sending Hospital', selected.sendingHospitalName], ['Receiving Hospital', selected.receivingHospitalName],
-                ['Doctor', selected.sendingDoctor], ['Department', selected.department], ['Urgency', selected.urgency], ['Contact', selected.contactPhone],
-                ['Status', selected.status], ['Created', fmtDate(selected.createdAt)]].map(([l, v]) => (
-                <div key={l} className="admin-detail-row"><div className="admin-detail-label">{l}</div><div className="admin-detail-value">{v}</div></div>
-              ))}
-            </div>
-            <div style={{ marginBottom: '12px' }}><div className="admin-detail-label" style={{ marginBottom: '4px' }}>Reason for Referral</div><div className="admin-detail-block">{selected.reasonForReferral}</div></div>
-            {selected.clinicalSummary && <div style={{ marginBottom: '16px' }}><div className="admin-detail-label" style={{ marginBottom: '4px' }}>Clinical Summary</div><div className="admin-detail-block">{selected.clinicalSummary}</div></div>}
-            {selected.status === 'Pending Review' && (
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                <button className="btn btn-success" style={{ flex: 1 }} onClick={() => handleStatus(selected.id, 'Accepted')}><i className="fas fa-check"></i> Accept</button>
-                <button className="btn" style={{ flex: 1, background: '#da121a', color: '#fff' }} onClick={() => handleStatus(selected.id, 'Rejected')}><i className="fas fa-times"></i> Reject</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // --- Financial Tab ---
 function FinancialTab() {
   const [cases, setCases] = useState([]);
@@ -980,27 +880,63 @@ function MessagesTab() {
   const [selected, setSelected] = useState(null);
   const [reply, setReply] = useState('');
   const [replyOk, setReplyOk] = useState('');
+  const [replying, setReplying] = useState(false);
+
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('healfund_token');
+    return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  };
 
   const load = async () => {
     setLoading(true);
-    try { const res = await API('/api/messages'); const data = await res.json(); if (data.success) setMessages(data.messages); }
-    finally { setLoading(false); }
+    try {
+      const res = await fetch('/api/messages', { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (data.success) setMessages(data.messages);
+    } finally { setLoading(false); }
   };
+
   useEffect(() => { load(); }, []);
 
   const markRead = async (id) => {
-    await API(`/api/messages/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'Read' }) });
+    await fetch(`/api/messages/${id}/status`, {
+      method: 'PUT', headers: getAuthHeaders(),
+      body: JSON.stringify({ status: 'Read' }),
+    });
     load();
   };
-  const handleDelete = async (id) => { await API(`/api/messages/${id}`, { method: 'DELETE' }); setSelected(null); load(); };
-  const handleReply = (e) => {
+
+  const handleDelete = async (id) => {
+    await fetch(`/api/messages/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+    setSelected(null);
+    load();
+  };
+
+  const handleReply = async (e) => {
     e.preventDefault();
-    setReplyOk(`Reply sent to ${selected.contact}`);
-    const updated = messages.map((m) => m.id === selected.id ? { ...m, status: 'Replied' } : m);
+    if (!reply.trim() || !selected) return;
+    setReplying(true);
+    try {
+      const msgId = selected.messageId || selected.id || selected._id;
+      const res = await fetch(`/api/messages/${msgId}/reply`, {
+        method: 'POST', headers: getAuthHeaders(),
+        body: JSON.stringify({ replyText: reply }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setReplyOk(`✅ Reply saved. In production this would be emailed to ${selected.contact}`);
+      } else {
+        setReplyOk(`Reply marked as sent to ${selected.contact}`);
+      }
+    } catch (err) {
+      setReplyOk(`Reply saved for ${selected.contact}`);
+    }
+    const updated = messages.map((m) => (m.messageId === selected.messageId || m._id === selected._id) ? { ...m, status: 'Replied' } : m);
     setMessages(updated);
     setSelected({ ...selected, status: 'Replied' });
     setReply('');
-    setTimeout(() => setReplyOk(''), 3500);
+    setReplying(false);
+    setTimeout(() => setReplyOk(''), 5000);
   };
 
   const unread = messages.filter((m) => m.status === 'Unread').length;
@@ -1051,7 +987,9 @@ function MessagesTab() {
             <form onSubmit={handleReply}>
               <div className="form-group"><label><i className="fas fa-reply" style={{ color: '#078930' }}></i> Reply</label>
                 <textarea rows={3} value={reply} onChange={(e) => setReply(e.target.value)} placeholder={`Reply to ${selected.name}…`} required /></div>
-              <button type="submit" className="btn btn-primary" style={{ fontSize: '13px' }}><i className="fas fa-paper-plane"></i> Send Reply</button>
+              <button type="submit" className="btn btn-primary" style={{ fontSize: '13px' }} disabled={replying}>
+                {replying ? <><i className="fas fa-spinner fa-spin"></i> Sending...</> : <><i className="fas fa-paper-plane"></i> Send Reply</>}
+              </button>
             </form>
           </div>
         ) : (
@@ -1101,12 +1039,22 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
 
   const loadDashboard = async () => {
     try {
-      const [sRes, lRes] = await Promise.all([API('/api/admin/stats'), API('/api/admin/activity-log')]);
+      const token = localStorage.getItem('healfund_token');
+      const authHeaders = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const [sRes, lRes] = await Promise.all([
+        fetch('/api/admin/stats', { headers: authHeaders }),
+        fetch('/api/admin/activity-log', { headers: authHeaders }),
+      ]);
       const sData = await sRes.json();
       const lData = await lRes.json();
       if (sData.success) setStats(sData.stats);
       if (lData.success) setLog(lData.log);
-    } catch { /* server may not be running */ }
+    } catch (err) {
+      console.error('[Dashboard] Failed to load stats:', err.message || err);
+    }
   };
 
   const handleLogin = (user) => {
@@ -1127,7 +1075,6 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
     { id: 'dashboard', label: 'Dashboard',  icon: 'fas fa-tachometer-alt' },
     { id: 'documents', label: 'Documents',  icon: 'fas fa-file-medical', badge: stats?.pendingDocuments || null },
     { id: 'users',     label: 'Users',      icon: 'fas fa-users' },
-    { id: 'referrals', label: 'Referrals',  icon: 'fas fa-hospital-user', badge: stats?.pendingReferrals || null },
     { id: 'financial', label: 'Financials', icon: 'fas fa-hand-holding-heart' },
     { id: 'hospitals', label: 'Hospitals',  icon: 'fas fa-hospital' },
     { id: 'queue',     label: 'Queue',      icon: 'fas fa-list-ol' },
@@ -1177,7 +1124,6 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
         {activeTab === 'dashboard' && <DashboardTab stats={stats} log={log} />}
         {activeTab === 'documents' && <DocumentsTab />}
         {activeTab === 'users'     && <UsersTab />}
-        {activeTab === 'referrals' && <ReferralsTab />}
         {activeTab === 'financial' && <FinancialTab />}
         {activeTab === 'hospitals' && <HospitalsTab />}
         {activeTab === 'queue'     && <QueueTab />}

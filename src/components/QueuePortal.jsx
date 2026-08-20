@@ -98,7 +98,7 @@ export default function QueuePortal({ currentLang, currentUser }) {
                     activeTicket.requiredDocuments.map((doc, i) => <li key={i}>{doc}</li>)
                   ) : (
                     <>
-                      <li>Referral Letter</li>
+                      <li>Medical Records</li>
                       <li>HealFund Patient QR / ID Card</li>
                       <li>Previous Medical & Lab Reports</li>
                     </>

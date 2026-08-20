@@ -68,7 +68,7 @@ export default function FinancialAssistancePortal({ currentLang }) {
         <p style={{ color: '#e0f2fe', fontSize: '14px', maxWidth: '750px' }}>
           {isAm
             ? 'በዘውዲቱ ሆስፒታል በሁለት ደረጃዎች (2-Stage Verification) የተረጋገጡ የታካሚዎች የህክምና ህክምና ፈንድ ድጋፍ።'
-            : 'Two-stage verified healthcare crowdfunding. Cases are first verified via hospital referral (Stage 1), then financial need is confirmed by Zewditu Memorial Hospital social work team (Stage 2).'}
+            : 'Two-stage verified healthcare crowdfunding. Cases are first verified via medical records (Stage 1), then financial need is confirmed by Zewditu Memorial Hospital social work team (Stage 2).'}
         </p>
       </div>
 
@@ -84,10 +84,10 @@ export default function FinancialAssistancePortal({ currentLang }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
           <div style={{ background: '#ffffff', padding: '16px', borderRadius: '12px', border: '1px solid #d0dbe8' }}>
             <h4 style={{ color: '#078930', marginBottom: '4px' }}>
-              <i className="fas fa-check-circle"></i> Stage 1 — Hospital Referral Verification
+              <i className="fas fa-check-circle"></i> Stage 1 — Medical Record Verification
             </h4>
             <p style={{ fontSize: '13px', color: '#5e6f82', margin: 0 }}>
-              Primary health center (Lideta HC) issues an official medical referral to Zewditu Memorial Hospital. Prevents unverified medical claims.
+              Primary health center (Lideta HC) submits verified medical records to Zewditu Memorial Hospital. Prevents unverified medical claims.
             </p>
           </div>
           <div style={{ background: '#ffffff', padding: '16px', borderRadius: '12px', border: '1px solid #d0dbe8' }}>

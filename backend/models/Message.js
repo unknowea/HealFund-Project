@@ -10,7 +10,6 @@ const messageSchema = new mongoose.Schema(
       enum: [
         'General Inquiry',
         'Medical File Verification',
-        'Hospital Referral',
         'Financial Assistance',
         'Community Agent',
       ],
@@ -22,6 +21,8 @@ const messageSchema = new mongoose.Schema(
       enum: ['Unread', 'Read', 'Replied'],
       default: 'Unread',
     },
+    reply: { type: String },
+    repliedAt: { type: Date },
   },
   { timestamps: true }
 );

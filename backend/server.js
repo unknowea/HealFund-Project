@@ -8,12 +8,13 @@ import connectDB from './config/db.js';
 // Route imports
 import authRoutes from './routes/auth.js';
 import hospitalRoutes from './routes/hospitals.js';
-import referralRoutes from './routes/referrals.js';
 import appointmentRoutes from './routes/appointments.js';
 import queueRoutes from './routes/queue.js';
 import financialRoutes from './routes/financial.js';
 import fileRoutes from './routes/files.js';
 import messageRoutes from './routes/messages.js';
+import conversationRoutes from './routes/conversations.js';
+import adminRoutes from './routes/admin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,19 +54,33 @@ app.get('/', (req, res) => {
 // ─── STATIC UPLOADS ────────────────────────────────────────────────────────────
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// ─── API ROUTES ────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/hospitals', hospitalRoutes);
-app.use('/api/referrals', referralRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/queue', queueRoutes);
 app.use('/api/financial-cases', financialRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/conversations', conversationRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ─── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'HealFund API is running', timestamp: new Date() });
+});
+
+// ─── PUBLIC STATS (for home page) ──────────────────────────────────────────────
+app.get('/api/public/stats', async (req, res) => {
+  try {
+    const [totalUsers, totalHospitals, totalFinancialCases] = await Promise.all([
+      (await import('./models/User.js')).default.countDocuments({ role: 'patient' }),
+      (await import('./models/Hospital.js')).default.countDocuments(),
+      (await import('./models/FinancialCase.js')).default.countDocuments({ status: 'Active' }),
+    ]);
+    res.json({ success: true, stats: { totalUsers, totalHospitals, totalFinancialCases } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // ─── 404 HANDLER ───────────────────────────────────────────────────────────────

@@ -30,10 +30,24 @@ export default function FinancialAssistancePortal({ currentLang }) {
   const handleDonate = async (e) => {
     e.preventDefault();
     if (!selectedCase) return;
+
+    // Item 3: Cap donation to remaining amount
+    const remaining = selectedCase.targetAmount - selectedCase.raisedAmount;
+    const requestedAmt = parseFloat(donationAmount) || 0;
+    if (remaining <= 0) {
+      setDonationSuccessMsg('This case is already fully funded. Thank you!');
+      setSelectedCase(null);
+      return;
+    }
+    const actualAmt = Math.min(requestedAmt, remaining);
+    if (actualAmt !== requestedAmt) {
+      setDonationAmount(String(actualAmt));
+    }
+
     setDonating(true);
     try {
       const data = await donate(selectedCase.caseId, {
-        amount: donationAmount,
+        amount: actualAmt,
         donorName: donorName || 'Anonymous Supporter',
         paymentMethod,
       });
@@ -76,12 +90,12 @@ export default function FinancialAssistancePortal({ currentLang }) {
       <div className="card" style={{ background: '#fafcff', border: '1px solid #e2eaf3' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
           <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #d0dbe8' }}>
-            <h4 style={{ color: '#078930', marginBottom: '4px' }}><i className="fas fa-check-circle"></i> Stage 1 — Hospital Referral Verification</h4>
-            <p style={{ fontSize: '13px', color: '#5e6f82', margin: 0 }}>Primary health center issues an official referral to Zewditu Memorial Hospital.</p>
+            <h4 style={{ color: '#078930', marginBottom: '4px' }}><i className="fas fa-check-circle"></i> Stage 1 — Medical Record Verification</h4>
+            <p style={{ fontSize: '13px', color: '#5e6f82', margin: 0 }}>Primary health center submits verified medical records to the receiving hospital.</p>
           </div>
           <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #d0dbe8' }}>
             <h4 style={{ color: '#078930', marginBottom: '4px' }}><i className="fas fa-user-check"></i> Stage 2 — Financial Need Verification</h4>
-            <p style={{ fontSize: '13px', color: '#5e6f82', margin: 0 }}>Zewditu evaluates clinical necessity and approves public support for patients.</p>
+            <p style={{ fontSize: '13px', color: '#5e6f82', margin: 0 }}>The hospital social work team evaluates clinical necessity and approves public support for patients.</p>
           </div>
         </div>
       </div>
@@ -139,6 +153,11 @@ export default function FinancialAssistancePortal({ currentLang }) {
             </div>
             <p style={{ fontSize: '14px', color: '#5e6f82', marginBottom: '16px' }}>
               Case: <strong>{selectedCase.caseId}</strong> — Verified by {selectedCase.verifyingHospital}
+              {selectedCase.targetAmount - selectedCase.raisedAmount < selectedCase.targetAmount && (
+                <span style={{ display: 'block', marginTop: '4px', color: '#078930', fontWeight: 600 }}>
+                  Remaining to goal: <strong>{(selectedCase.targetAmount - selectedCase.raisedAmount).toLocaleString()} ETB</strong>
+                </span>
+              )}
             </p>
             <form onSubmit={handleDonate}>
               <div className="form-group">

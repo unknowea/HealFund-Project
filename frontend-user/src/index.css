@@ -477,3 +477,38 @@ body {
   .module-tabs { justify-content: center; }
   .user-profile { justify-content: center; }
 }
+
+@media (max-width: 640px) {
+  .app-container { padding: 12px; }
+  .card { padding: 16px; border-radius: 14px; }
+  .hero { padding: 28px 16px 20px; }
+  .hero i { font-size: 40px; }
+  .hero h1 { font-size: 26px; }
+  .hero p { font-size: 15px; }
+  .card-header h3 { font-size: 16px; }
+  .btn { padding: 9px 18px; font-size: 14px; }
+  .stat-item { padding: 12px 16px; min-width: 100px; }
+  .stat-item h2 { font-size: 22px; }
+  .modal-box { padding: 24px 18px; border-radius: 16px; }
+  .features-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stats-row { gap: 10px; }
+  .appointment-slots { gap: 8px; }
+  .slot { padding: 6px 14px; font-size: 13px; }
+  .channels-grid { grid-template-columns: 1fr 1fr; }
+  .assistance-options { gap: 10px; }
+  .assist-item { padding: 12px; }
+  .patient-card { padding: 20px 16px; }
+  .patient-card .avatar-lg { width: 70px; height: 70px; font-size: 30px; }
+  .module-tabs { background: none; padding: 0; gap: 4px; }
+  .module-tab { padding: 6px 10px; font-size: 12px; }
+  .navbar { padding: 12px 16px; border-radius: 12px; margin-bottom: 16px; }
+}
+
+@media (max-width: 400px) {
+  .hero h1 { font-size: 22px; }
+  .features-grid { grid-template-columns: 1fr; }
+  .form-grid-2 { grid-template-columns: 1fr; }
+  .card-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .stats-row { flex-direction: column; align-items: center; }
+  .stat-item { width: 100%; max-width: 280px; }
+}

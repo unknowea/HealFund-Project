@@ -1,205 +1,151 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getConversations, sendChatMessage, markConversationRead } from '../api.js';
 
 export default function Messaging({ currentLang, currentUser }) {
-  const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
+  const [conversation, setConversation] = useState(null);
   const [messageInput, setMessageInput] = useState('');
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [newMessage, setNewMessage] = useState('');
-  const [submitted, setSubmitted] = useState(false);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
-
   const isAm = currentLang === 'am';
-  const storageKey = `healfund_patient_conversations_${currentUser?._id || currentUser?.patientId || 'guest'}`;
+
+  const patientId = currentUser?._id || currentUser?.patientId;
+  const convId = `CONV-${patientId}-ADMIN`;
 
   useEffect(() => {
-    loadConversations();
-    const interval = setInterval(loadConversations, 5000);
-    return () => clearInterval(interval);
+    if (currentUser) {
+      fetchConversation();
+      const interval = setInterval(fetchConversation, 4000);
+      return () => clearInterval(interval);
+    }
   }, [currentUser]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [selectedConversation?.messages]);
+  }, [conversation?.messages?.length]);
 
-  const loadConversations = () => {
-    setLoading(true);
+  const fetchConversation = async () => {
     try {
-      const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      setConversations(stored);
-      if (!selectedConversation && stored.length > 0) setSelectedConversation(stored[0]);
+      const data = await getConversations();
+      const convs = data.conversations || [];
+      const mine = convs.find((c) => c.conversationId === convId) || null;
+      setConversation(mine);
+      if (mine?.unreadByPatient > 0) {
+        await markConversationRead(convId).catch(() => {});
+      }
     } catch (err) {
-      console.error('Error loading conversations:', err);
+      console.warn('Chat fetch error:', err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSendMessage = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
-    if (!messageInput.trim()) return;
+    if (!messageInput.trim() || sending) return;
+    setSending(true);
 
-    const convId = `CONV-${currentUser?._id || currentUser?.patientId || 'guest'}-ADMIN`;
-    let conv = conversations.find((c) => c.id === convId);
-
-    if (!conv) {
-      conv = {
-        id: convId,
-        participantId: 'admin',
-        participantName: 'HealFund Support',
-        participantRole: 'admin',
-        messages: [],
-        lastMessage: '',
-        lastMessageTime: new Date().toISOString(),
-        unreadCount: 0,
-      };
-    }
-
-    const newMsg = {
-      id: `MSG-${Date.now()}`,
-      sender: currentUser?._id || currentUser?.patientId || 'patient',
+    // Optimistic UI update
+    const optimisticMsg = {
+      _id: `temp-${Date.now()}`,
+      sender: 'patient',
       senderName: currentUser?.name || 'Patient',
       content: messageInput.trim(),
       timestamp: new Date().toISOString(),
     };
-
-    const updatedConv = {
-      ...conv,
-      messages: [...(conv.messages || []), newMsg],
-      lastMessage: messageInput.trim(),
-      lastMessageTime: new Date().toISOString(),
-    };
-
-    const existingIndex = conversations.findIndex((c) => c.id === convId);
-    const updated = existingIndex >= 0
-      ? conversations.map((c) => c.id === convId ? updatedConv : c)
-      : [updatedConv, ...conversations];
-
-    setConversations(updated);
-    setSelectedConversation(updatedConv);
+    setConversation((prev) => prev
+      ? { ...prev, messages: [...prev.messages, optimisticMsg] }
+      : { conversationId: convId, messages: [optimisticMsg], patientId, patientName: currentUser?.name }
+    );
+    const sentText = messageInput.trim();
     setMessageInput('');
-    localStorage.setItem(storageKey, JSON.stringify(updated));
+
+    try {
+      await sendChatMessage(convId, sentText, patientId, currentUser?.name || 'Patient');
+      fetchConversation();
+    } catch (err) {
+      console.warn('Send error:', err.message);
+    } finally {
+      setSending(false);
+    }
   };
 
-  const handleSendToAdmin = async (e) => {
-    e.preventDefault();
-    if (!newMessage.trim()) return;
-    setSending(true);
-    try {
-      await fetch('/api/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(localStorage.getItem('healfund_token') ? { Authorization: `Bearer ${localStorage.getItem('healfund_token')}` } : {}) },
-        body: JSON.stringify({
-          name: currentUser?.name || 'Patient',
-          contact: currentUser?.email || currentUser?.patientId || 'Patient',
-          category: 'General Inquiry',
-          message: newMessage.trim(),
-        }),
-      });
-    } catch (err) {
-      console.warn('Backend offline:', err);
-    }
-    setNewMessage('');
-    setSending(false);
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 4000);
-  };
+  const messages = conversation?.messages || [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0', height: 'calc(100vh - 180px)', minHeight: '500px' }}>
       {/* Header */}
-      <div className="card" style={{ background: 'linear-gradient(135deg, #0f3b5e 0%, #078930 100%)', color: '#fff' }}>
-        <h2 style={{ fontSize: '24px', marginBottom: '6px', color: '#fff' }}>
-          <i className="fas fa-comments"></i> {isAm ? 'መልዕክቶች' : 'Messages & Support Chat'}
-        </h2>
-        <p style={{ color: '#e0f2fe', fontSize: '14px', margin: 0 }}>
-          {isAm ? 'ከሂልፈንድ ድጋፍ ቡድን ጋር ቀጥታ ይነጋገሩ።' : 'Chat directly with HealFund hospital support team.'}
-        </p>
+      <div style={{ background: 'linear-gradient(135deg, #0f3b5e, #078930)', padding: '16px 20px', borderRadius: '16px 16px 0 0', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '18px' }}><i className="fas fa-comments"></i> {isAm ? 'ቀጥታ ድጋፍ' : 'Live Support Chat'}</h3>
+          <p style={{ margin: 0, fontSize: '13px', opacity: 0.8 }}>{isAm ? 'ከሂልፈንድ ቡድን ጋር ቀጥታ ይነጋገሩ' : 'Chat with HealFund hospital support team'}</p>
+        </div>
+        <button onClick={fetchConversation} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', fontSize: '14px' }}>
+          <i className="fas fa-sync-alt"></i>
+        </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-        {/* Live Chat */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ background: '#078930', padding: '16px', color: '#fff' }}>
-            <h3 style={{ margin: 0, fontSize: '16px' }}><i className="fas fa-comment-dots"></i> {isAm ? 'ቀጥታ ውይይት' : 'Live Chat'}</h3>
+      {/* Messages Area */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px', background: '#f5f5f5', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#7a8a9e' }}>
+            <i className="fas fa-spinner fa-spin" style={{ fontSize: '24px', marginBottom: '8px', display: 'block' }}></i>
+            {isAm ? 'ቀጥታ ውይይት በመጫን ላይ...' : 'Loading chat...'}
           </div>
-
-          <div style={{ display: 'flex', height: '400px' }}>
-            {/* Conversation list */}
-            <div style={{ width: '160px', borderRight: '1px solid #e5e5e5', overflowY: 'auto', background: '#f8faff' }}>
-              {conversations.length === 0 ? (
-                <p style={{ fontSize: '12px', color: '#999', padding: '12px', textAlign: 'center' }}>{isAm ? 'ምንም የለም' : 'No chats yet'}</p>
-              ) : conversations.map((conv) => (
-                <div key={conv.id} onClick={() => setSelectedConversation(conv)}
-                  style={{ padding: '10px 12px', borderBottom: '1px solid #e5e5e5', cursor: 'pointer', background: selectedConversation?.id === conv.id ? '#e8f5e9' : '#fff', fontSize: '13px', fontWeight: 600, color: '#0f3b5e' }}>
-                  {conv.participantName}
+        ) : messages.length === 0 ? (
+          <div style={{ textAlign: 'center', margin: 'auto', color: '#7a8a9e' }}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>💬</div>
+            <p style={{ fontSize: '15px', fontWeight: 600, color: '#0f3b5e' }}>{isAm ? 'ቀጥታ ውይይት ይጀምሩ' : 'Start a conversation'}</p>
+            <p style={{ fontSize: '13px', margin: 0 }}>{isAm ? 'ከዚህ በታች ያለውን ሳጥን ይጠቀሙ።' : 'Type a message below to connect with our support team.'}</p>
+          </div>
+        ) : (
+          messages.map((msg, i) => {
+            const isMine = msg.sender === 'patient';
+            return (
+              <div key={msg._id || i} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: '8px' }}>
+                {!isMine && (
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#078930', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, flexShrink: 0 }}>
+                    H
+                  </div>
+                )}
+                <div style={{ maxWidth: '72%' }}>
+                  {!isMine && <div style={{ fontSize: '11px', color: '#7a8a9e', marginBottom: '3px', marginLeft: '4px' }}>HealFund Support</div>}
+                  <div style={{ background: isMine ? '#078930' : '#fff', color: isMine ? '#fff' : '#0f3b5e', padding: '10px 14px', borderRadius: isMine ? '18px 18px 4px 18px' : '18px 18px 18px 4px', wordWrap: 'break-word', boxShadow: '0 2px 6px rgba(0,0,0,0.08)', fontSize: '14px', lineHeight: '1.5' }}>
+                    {msg.content}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#aaa', marginTop: '3px', textAlign: isMine ? 'right' : 'left', marginRight: isMine ? '4px' : 0, marginLeft: isMine ? 0 : '4px' }}>
+                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
                 </div>
-              ))}
-            </div>
-
-            {/* Messages */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ flex: 1, overflowY: 'auto', padding: '12px', background: '#f5f5f5', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {!selectedConversation ? (
-                  <p style={{ color: '#999', textAlign: 'center', marginTop: 'auto', marginBottom: 'auto', fontSize: '13px' }}>{isAm ? 'ውይይት ይምረጡ' : 'Start a new message below'}</p>
-                ) : (selectedConversation.messages || []).length === 0 ? (
-                  <p style={{ color: '#999', textAlign: 'center', marginTop: 'auto', marginBottom: 'auto', fontSize: '13px' }}>{isAm ? 'ምንም መልዕክት ገና' : 'No messages yet'}</p>
-                ) : (selectedConversation.messages || []).map((msg) => {
-                  const isMine = msg.sender !== 'admin';
-                  return (
-                    <div key={msg.id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
-                      <div style={{ maxWidth: '80%', background: isMine ? '#078930' : '#fff', color: isMine ? '#fff' : '#0f3b5e', padding: '8px 12px', borderRadius: isMine ? '14px 14px 4px 14px' : '14px 14px 14px 4px', fontSize: '13px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                        {msg.content}
-                        <div style={{ fontSize: '10px', opacity: 0.7, marginTop: '2px' }}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
+                {isMine && (
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#0f3b5e', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, flexShrink: 0 }}>
+                    {(currentUser?.name || 'P').charAt(0).toUpperCase()}
+                  </div>
+                )}
               </div>
-
-              <form onSubmit={handleSendMessage} style={{ padding: '10px', borderTop: '1px solid #e5e5e5', display: 'flex', gap: '8px' }}>
-                <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder={isAm ? 'መልዕክት...' : 'Type message...'} style={{ flex: 1, padding: '8px 12px', border: '1px solid #e5e5e5', borderRadius: '20px', fontSize: '13px' }} />
-                <button type="submit" disabled={!messageInput.trim()} style={{ background: '#078930', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: !messageInput.trim() ? 'not-allowed' : 'pointer', opacity: !messageInput.trim() ? 0.5 : 1, fontSize: '14px' }}>
-                  <i className="fas fa-paper-plane"></i>
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-
-        {/* Send to Admin */}
-        <div className="card">
-          <div className="card-header">
-            <h3><i className="fas fa-envelope" style={{ color: '#078930' }}></i> {isAm ? 'ለአስተዳዳሪ ላክ' : 'Message Admin'}</h3>
-          </div>
-          <p style={{ fontSize: '14px', color: '#5e6f82', marginBottom: '16px' }}>
-            {isAm ? 'ለሆስፒታሉ የድጋፍ ቡድን ቀጥታ መልዕክት ይላኩ።' : 'Send a direct message to the hospital support team. They will reply via the Admin Portal.'}
-          </p>
-
-          {submitted && (
-            <div style={{ background: '#e7f5eb', color: '#078930', padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', fontWeight: 600 }}>
-              <i className="fas fa-check-circle"></i> {isAm ? 'መልዕክትዎ ደርሷል!' : 'Message sent to admin successfully!'}
-            </div>
-          )}
-
-          <form onSubmit={handleSendToAdmin} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label style={{ fontWeight: 600, fontSize: '14px', display: 'block', marginBottom: '6px' }}>{isAm ? 'መልዕክትዎ *' : 'Your Message *'}</label>
-              <textarea rows="5" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={isAm ? 'ለሆስፒታሉ ቡድን መልዕክትዎን ይጻፉ...' : 'Describe your concern, question, or request to the hospital team...'} required style={{ width: '100%', padding: '12px', border: '1px solid #d0dbe8', borderRadius: '10px', fontSize: '14px', resize: 'vertical' }}></textarea>
-            </div>
-            <button type="submit" className="btn btn-primary" disabled={sending || !newMessage.trim()}>
-              {sending ? <><i className="fas fa-spinner fa-spin"></i> {isAm ? 'ይልካል...' : 'Sending...'}</> : <><i className="fas fa-paper-plane"></i> {isAm ? 'ሚልካ' : 'Send to Admin'}</>}
-            </button>
-          </form>
-
-          <div style={{ marginTop: '16px', padding: '12px 16px', background: '#e8f0fe', borderRadius: '8px', fontSize: '13px', color: '#0f3b5e' }}>
-            <i className="fas fa-info-circle"></i> {isAm ? ' አስተዳደራችን በቅርቡ ምላሽ ይሰጥዎታል።' : ' The admin team will respond to your message shortly via the hospital portal.'}
-          </div>
-        </div>
+            );
+          })
+        )}
+        <div ref={messagesEndRef} />
       </div>
+
+      {/* Input */}
+      <form onSubmit={handleSend} style={{ padding: '14px 16px', background: '#fff', borderTop: '1px solid #e5e5e5', borderRadius: '0 0 16px 16px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <input
+          type="text"
+          value={messageInput}
+          onChange={(e) => setMessageInput(e.target.value)}
+          placeholder={isAm ? 'መልዕክትዎን ይጻፉ...' : 'Type your message...'}
+          disabled={sending}
+          style={{ flex: 1, padding: '10px 16px', border: '1.5px solid #d0dbe8', borderRadius: '24px', fontSize: '14px', outline: 'none', fontFamily: 'inherit', transition: '0.2s' }}
+          onFocus={(e) => e.target.style.borderColor = '#078930'}
+          onBlur={(e) => e.target.style.borderColor = '#d0dbe8'}
+        />
+        <button type="submit" disabled={!messageInput.trim() || sending}
+          style={{ background: '#078930', color: '#fff', border: 'none', borderRadius: '50%', width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (!messageInput.trim() || sending) ? 'not-allowed' : 'pointer', opacity: (!messageInput.trim() || sending) ? 0.5 : 1, fontSize: '16px', transition: '0.2s', flexShrink: 0 }}>
+          {sending ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-paper-plane"></i>}
+        </button>
+      </form>
     </div>
   );
 }

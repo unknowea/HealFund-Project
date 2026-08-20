@@ -27,21 +27,19 @@ export const login = (email, password) =>
 export const signup = (payload) =>
   handle(fetch(`${BASE}/auth/signup`, { method: 'POST', headers: headers(), body: JSON.stringify(payload) }));
 
+export const getProfile = () =>
+  handle(fetch(`${BASE}/auth/profile`, { headers: headers() }));
+
+export const updateProfile = (payload) =>
+  handle(fetch(`${BASE}/auth/profile`, { method: 'PUT', headers: headers(), body: JSON.stringify(payload) }));
+
+// ─── PUBLIC ────────────────────────────────────────────────────────────────────
+export const getPublicStats = () =>
+  handle(fetch(`${BASE}/public/stats`, { headers: { 'Content-Type': 'application/json' } }));
+
 // ─── HOSPITALS ─────────────────────────────────────────────────────────────────
 export const getHospitals = () =>
   handle(fetch(`${BASE}/hospitals`, { headers: headers() }));
-
-// ─── REFERRALS ─────────────────────────────────────────────────────────────────
-export const getReferrals = (params = {}) => {
-  const q = new URLSearchParams(params).toString();
-  return handle(fetch(`${BASE}/referrals${q ? '?' + q : ''}`, { headers: headers() }));
-};
-
-export const createReferral = (payload) =>
-  handle(fetch(`${BASE}/referrals`, { method: 'POST', headers: headers(), body: JSON.stringify(payload) }));
-
-export const updateReferralStatus = (id, payload) =>
-  handle(fetch(`${BASE}/referrals/${id}/status`, { method: 'PUT', headers: headers(), body: JSON.stringify(payload) }));
 
 // ─── APPOINTMENTS ──────────────────────────────────────────────────────────────
 export const getAppointments = (params = {}) => {
@@ -78,8 +76,24 @@ export const sendMessage = (payload) =>
 export const updateMessageStatus = (id, status) =>
   handle(fetch(`${BASE}/messages/${id}/status`, { method: 'PUT', headers: headers(), body: JSON.stringify({ status }) }));
 
+export const replyToMessage = (id, replyText) =>
+  handle(fetch(`${BASE}/messages/${id}/reply`, { method: 'POST', headers: headers(), body: JSON.stringify({ replyText }) }));
+
 export const deleteMessage = (id) =>
   handle(fetch(`${BASE}/messages/${id}`, { method: 'DELETE', headers: headers() }));
+
+// ─── CONVERSATIONS (Live Chat) ─────────────────────────────────────────────────
+export const getConversations = () =>
+  handle(fetch(`${BASE}/conversations`, { headers: headers() }));
+
+export const sendChatMessage = (conversationId, content, patientId, patientName) =>
+  handle(fetch(`${BASE}/conversations/messages`, {
+    method: 'POST', headers: headers(),
+    body: JSON.stringify({ conversationId, content, patientId, patientName }),
+  }));
+
+export const markConversationRead = (conversationId) =>
+  handle(fetch(`${BASE}/conversations/${conversationId}/read`, { method: 'PUT', headers: headers() }));
 
 // ─── FILE UPLOAD ───────────────────────────────────────────────────────────────
 export const uploadFile = (file) => {

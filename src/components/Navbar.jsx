@@ -52,14 +52,6 @@ export default function Navbar({
             </button>
 
             <button
-              className={`module-tab ${activeModule === 'referral' ? 'active' : ''}`}
-              onClick={() => setActiveModule('referral')}
-            >
-              <i className="fas fa-hospital-user"></i>
-              <span>{currentLang === 'am' ? 'የሆስፒታል ሪፈራል' : 'Referrals'}</span>
-            </button>
-
-            <button
               className={`module-tab ${activeModule === 'queue' ? 'active' : ''}`}
               onClick={() => setActiveModule('queue')}
             >
