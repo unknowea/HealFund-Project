@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getFinancialCases, donate } from '../api.js';
+import { getFinancialCases, donate, verifyDonation } from '../api.js';
 
 export default function FinancialAssistancePortal({ currentLang }) {
   const [cases, setCases] = useState([]);
@@ -7,13 +7,23 @@ export default function FinancialAssistancePortal({ currentLang }) {
   const [selectedCase, setSelectedCase] = useState(null);
   const [donationAmount, setDonationAmount] = useState('1000');
   const [donorName, setDonorName] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('Telebirr');
+  const [donorEmail, setDonorEmail] = useState('');
   const [donationSuccessMsg, setDonationSuccessMsg] = useState('');
+  const [paymentError, setPaymentError] = useState('');
   const [donating, setDonating] = useState(false);
 
   const isAm = currentLang === 'am';
 
-  useEffect(() => { fetchCases(); }, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const txRef = params.get('tx_ref');
+    const caseId = params.get('case_id');
+    const loadCases = async () => {
+      await fetchCases();
+      if (txRef && caseId) await confirmDonation(caseId, txRef);
+    };
+    loadCases();
+  }, []);
 
   const fetchCases = async () => {
     setLoading(true);
@@ -27,19 +37,35 @@ export default function FinancialAssistancePortal({ currentLang }) {
     }
   };
 
+  const confirmDonation = async (caseId, txRef) => {
+    try {
+      const data = await verifyDonation(caseId, txRef);
+      await fetchCases();
+      setDonationSuccessMsg(data.paid ? 'Thank you! Your Chapa donation was received.' : 'The Chapa payment was not completed.');
+    } catch (err) {
+      setDonationSuccessMsg(`Payment verification failed: ${err.message}`);
+    } finally {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  };
+
   const handleDonate = async (e) => {
     e.preventDefault();
     if (!selectedCase) return;
+    setPaymentError('');
 
     // Item 3: Cap donation to remaining amount
     const remaining = selectedCase.targetAmount - selectedCase.raisedAmount;
     const requestedAmt = parseFloat(donationAmount) || 0;
     if (remaining <= 0) {
-      setDonationSuccessMsg('This case is already fully funded. Thank you!');
-      setSelectedCase(null);
+      setPaymentError('This case is already fully funded.');
       return;
     }
     const actualAmt = Math.min(requestedAmt, remaining);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(donorEmail.trim())) {
+      setPaymentError('Enter a valid email address for the Chapa receipt.');
+      return;
+    }
     if (actualAmt !== requestedAmt) {
       setDonationAmount(String(actualAmt));
     }
@@ -48,22 +74,13 @@ export default function FinancialAssistancePortal({ currentLang }) {
     try {
       const data = await donate(selectedCase.caseId, {
         amount: actualAmt,
-        donorName: donorName || 'Anonymous Supporter',
-        paymentMethod,
+  donorName: donorName || 'Anonymous Supporter',
+        donorEmail,
       });
-      setCases(cases.map((c) => c.caseId === selectedCase.caseId ? data.case : c));
-      setDonationSuccessMsg(`🎉 Thank you! ${data.message}`);
-      setSelectedCase(null);
+      if (!data.checkoutUrl) throw new Error('Chapa did not return a checkout URL');
+      window.location.assign(data.checkoutUrl);
     } catch (err) {
-      // Optimistic update on network failure
-      const amt = parseFloat(donationAmount) || 1000;
-      setCases(cases.map((c) =>
-        c.caseId === selectedCase.caseId
-          ? { ...c, raisedAmount: c.raisedAmount + amt, donorsCount: c.donorsCount + 1 }
-          : c
-      ));
-      setDonationSuccessMsg(`🎉 Thank you! Donation of ${amt} ETB via ${paymentMethod} processed.`);
-      setSelectedCase(null);
+      setPaymentError(`Payment could not start: ${err.message}`);
     } finally {
       setDonating(false);
     }
@@ -159,6 +176,11 @@ export default function FinancialAssistancePortal({ currentLang }) {
                 </span>
               )}
             </p>
+            {paymentError && (
+              <div role="alert" style={{ background: '#fff1f0', color: '#a8071a', border: '1px solid #ffa39e', padding: '12px', borderRadius: '8px', marginBottom: '14px', fontSize: '14px' }}>
+                <i className="fas fa-exclamation-circle"></i> {paymentError}
+              </div>
+            )}
             <form onSubmit={handleDonate}>
               <div className="form-group">
                 <label>Your Name (Optional)</label>
@@ -174,15 +196,11 @@ export default function FinancialAssistancePortal({ currentLang }) {
                 <input type="number" value={donationAmount} onChange={(e) => setDonationAmount(e.target.value)} placeholder="Custom amount" required min="1" />
               </div>
               <div className="form-group">
-                <label>Payment Method</label>
-                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                  <option value="Telebirr">Telebirr (*127#)</option>
-                  <option value="CBE Birr">CBE Birr</option>
-                  <option value="Chapa / Bank Transfer">Chapa / Bank Card</option>
-                </select>
+                <label>Email for Chapa receipt *</label>
+                <input type="email" value={donorEmail} onChange={(e) => setDonorEmail(e.target.value)} placeholder="you@example.com" required />
               </div>
               <button type="submit" className="btn btn-success" style={{ width: '100%', padding: '12px', marginTop: '10px' }} disabled={donating}>
-                {donating ? <><i className="fas fa-spinner fa-spin"></i> Processing...</> : <><i className="fas fa-lock"></i> Process {donationAmount || '1000'} ETB Donation</>}
+                {donating ? <><i className="fas fa-spinner fa-spin"></i> Opening Chapa...</> : <><i className="fas fa-lock"></i> Pay {donationAmount || '1000'} ETB with Chapa</>}
               </button>
             </form>
           </div>

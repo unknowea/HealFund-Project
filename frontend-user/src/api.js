@@ -66,6 +66,9 @@ export const getFinancialCases = () =>
 export const donate = (id, payload) =>
   handle(fetch(`${BASE}/financial-cases/${id}/donate`, { method: 'POST', headers: headers(), body: JSON.stringify(payload) }));
 
+export const verifyDonation = (id, txRef) =>
+  handle(fetch(`${BASE}/financial-cases/${id}/donate/verify?tx_ref=${encodeURIComponent(txRef)}`, { headers: headers() }));
+
 // ─── MESSAGES ──────────────────────────────────────────────────────────────────
 export const getMessages = () =>
   handle(fetch(`${BASE}/messages`, { headers: headers() }));

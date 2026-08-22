@@ -14,10 +14,18 @@ const headers = (extra = {}) => ({
 });
 
 const handle = async (fetchPromise) => {
-  const res = await fetchPromise;
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || 'Request failed');
-  return data;
+  try {
+    const res = await fetchPromise;
+    const contentType = res.headers.get('content-type') || '';
+    const data = contentType.includes('application/json') ? await res.json() : {};
+    if (!res.ok) throw new Error(data.message || `Request failed (${res.status})`);
+    return data;
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error('Cannot reach the HealFund backend. Start the backend server on port 5000 and try again.');
+    }
+    throw error;
+  }
 };
 
 // ─── AUTH ──────────────────────────────────────────────────────────────────────
@@ -65,6 +73,9 @@ export const getFinancialCases = () =>
 
 export const donate = (id, payload) =>
   handle(fetch(`${BASE}/financial-cases/${id}/donate`, { method: 'POST', headers: headers(), body: JSON.stringify(payload) }));
+
+export const verifyDonation = (id, txRef) =>
+  handle(fetch(`${BASE}/financial-cases/${id}/donate/verify?tx_ref=${encodeURIComponent(txRef)}`, { headers: headers() }));
 
 // ─── MESSAGES ──────────────────────────────────────────────────────────────────
 export const getMessages = () =>

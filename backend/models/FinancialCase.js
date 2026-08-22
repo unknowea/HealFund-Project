@@ -2,8 +2,12 @@ import mongoose from 'mongoose';
 
 const donationSchema = new mongoose.Schema({
   donorName: { type: String, default: 'Anonymous Supporter' },
+  donorEmail: { type: String, default: '', trim: true, lowercase: true },
+  accountNumber: { type: String, default: '', trim: true },
   amount: { type: Number, required: true },
-  paymentMethod: { type: String, default: 'Telebirr' },
+  paymentMethod: { type: String, default: 'Chapa' },
+  chapaTxRef: { type: String, default: '' },
+  paymentStatus: { type: String, enum: ['pending', 'success', 'failed'], default: 'pending' },
   donatedAt: { type: Date, default: Date.now },
 });
 
