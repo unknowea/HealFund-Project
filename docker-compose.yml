@@ -1,0 +1,54 @@
+services:
+  mongodb:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_DATABASE: healfund
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGO_URI: ${MONGO_URI:-mongodb://mongodb:27017/healfund}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
+      CHAPA_SECRET_KEY: ${CHAPA_SECRET_KEY:-}
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-}
+      USER_FRONTEND_URL: http://localhost:3000
+      ADMIN_FRONTEND_URL: http://localhost:3001
+    ports:
+      - "5000:5000"
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: on-failure:3
+
+  user-frontend:
+    build:
+      context: ./user frontend
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+  admin-frontend:
+    build:
+      context: ./admin frontend
+    ports:
+      - "3001:80"
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  mongodb_data:

@@ -1,15 +1,14 @@
 import jwt from 'jsonwebtoken';
 
-// Protect routes — require valid JWT
 export const protect = (req, res, next) => {
   const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!token) {
     return res.status(401).json({ success: false, message: 'Not authorised, no token' });
   }
 
   try {
-    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded; // { id, email, role }
     next();

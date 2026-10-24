@@ -1,11 +1,12 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import mongoose from 'mongoose';
 import { fileURLToPath } from 'url';
 import { protect, requireRole } from '../middleware/auth.js';
 import User from '../models/User.js';
 import Appointment from '../models/Appointment.js';
-import FinancialCase from '../models/FinancialCase.js';
+import FinancialCase, { getConfirmedAccounting } from '../models/FinancialCase.js';
 import Hospital from '../models/Hospital.js';
 import Message from '../models/Message.js';
 import PatientDocument from '../models/PatientDocument.js';
@@ -13,7 +14,16 @@ import Queue from '../models/Queue.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadDir = path.join(__dirname, '../../uploads');
+const uploadDir = path.join(__dirname, '../uploads');
+const uploadRoot = path.resolve(uploadDir);
+const getUploadPath = (filename) => {
+  if (typeof filename !== 'string') return null;
+  const filePath = path.resolve(uploadRoot, filename);
+  const relativePath = path.relative(uploadRoot, filePath);
+  return relativePath && relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`) && !path.isAbsolute(relativePath)
+    ? filePath
+    : null;
+};
 
 const router = express.Router();
 
@@ -37,13 +47,14 @@ const serializeDocument = (doc) => ({
 router.get('/stats', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
     const [
-      totalUsers, totalAppointments, totalHospitals,
+      totalUsers, totalAppointments, pendingAppointments, totalHospitals,
       financialCases, totalDocuments, pendingDocuments,
       verifiedDocuments, rejectedDocuments,
     ] = await Promise.all([
       User.countDocuments({ role: 'patient' }),
       Appointment.countDocuments(),
-      Hospital.countDocuments(),
+      Appointment.countDocuments({ status: 'Pending Review' }),
+      Hospital.countDocuments({ hospitalId: 'HOSP-001' }),
       FinancialCase.find(),
       PatientDocument.countDocuments(),
       PatientDocument.countDocuments({ status: 'Pending Verification' }),
@@ -51,9 +62,9 @@ router.get('/stats', protect, requireRole('admin', 'hospital_officer'), async (r
       PatientDocument.countDocuments({ status: 'Rejected' }),
     ]);
 
-    const totalRaised = financialCases.reduce((s, c) => s + (c.raisedAmount || 0), 0);
-    const totalTarget = financialCases.reduce((s, c) => s + (c.targetAmount || 0), 0);
-    const totalDonors = financialCases.reduce((s, c) => s + (c.donorsCount || 0), 0);
+    const totalRaised = financialCases.reduce((sum, financialCase) => sum + getConfirmedAccounting(financialCase).raisedAmount, 0);
+    const totalTarget = financialCases.reduce((sum, financialCase) => sum + (financialCase.targetAmount || 0), 0);
+    const totalDonors = financialCases.reduce((sum, financialCase) => sum + getConfirmedAccounting(financialCase).donorsCount, 0);
 
     res.json({
       success: true,
@@ -68,6 +79,7 @@ router.get('/stats', protect, requireRole('admin', 'hospital_officer'), async (r
         totalTarget,
         totalDonors,
         totalAppointments,
+        pendingAppointments,
         totalHospitals,
       },
     });
@@ -129,7 +141,7 @@ router.put('/documents/:id/verify', protect, requireRole('admin', 'hospital_offi
           estimatedTime: new Date(Date.now() + 86400000 * 2),
           status: 'Waiting',
           urgency: targetUrgency,
-          requiredDocuments: [doc.originalName, 'ID / QR Card'],
+          requiredDocuments: [doc.originalName, 'Patient ID Card'],
         });
       } else {
         generatedToken = queueEntry.token;
@@ -159,15 +171,33 @@ router.put('/documents/:id/verify', protect, requireRole('admin', 'hospital_offi
 // GET /api/admin/documents/:id/file
 router.get('/documents/:id/file', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
-    const doc = await PatientDocument.findOne({ documentId: req.params.id });
-    if (!doc) return res.status(404).json({ success: false, message: 'Document not found' });
-
-    const filePath = path.join(uploadDir, doc.filename);
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ success: false, message: 'File not found on server' });
+    console.log('🔍 Document file request:', req.params.id);
+    
+    let doc = await PatientDocument.findOne({
+      $or: [{ documentId: req.params.id }, { filename: req.params.id }],
+    });
+    console.log('📋 Document found:', doc ? doc.documentId : 'NOT FOUND');
+    
+    if (!doc && mongoose.Types.ObjectId.isValid(req.params.id)) {
+      doc = await PatientDocument.findById(req.params.id);
+      console.log('📋 Document found by ID:', doc ? doc.documentId : 'NOT FOUND');
     }
-    res.download(filePath, doc.originalName);
+    if (!doc) return res.status(404).json({ success: false, message: 'Document not found in database' });
+
+    const filePath = getUploadPath(doc.filename);
+    console.log('📁 Checking file path:', filePath);
+    console.log('✅ File exists:', fs.existsSync(filePath));
+    
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'File not found on server. Please re-upload.' });
+    }
+    if (req.query.action === 'view') {
+      res.sendFile(filePath, { headers: { 'Content-Disposition': `inline; filename="${doc.originalName || doc.filename}"` } });
+    } else {
+      res.download(filePath, doc.originalName || doc.filename);
+    }
   } catch (err) {
+    console.error('❌ Error in document file route:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
@@ -175,12 +205,24 @@ router.get('/documents/:id/file', protect, requireRole('admin', 'hospital_office
 // DELETE /api/admin/documents/:id
 router.delete('/documents/:id', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
-    const doc = await PatientDocument.findOneAndDelete({ documentId: req.params.id });
+    let doc = await PatientDocument.findOne({
+      $or: [{ documentId: req.params.id }, { filename: req.params.id }],
+    });
+    if (!doc && mongoose.Types.ObjectId.isValid(req.params.id)) {
+      doc = await PatientDocument.findById(req.params.id);
+    }
     if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
 
-    const filePath = path.join(uploadDir, doc.filename);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    const filePath = getUploadPath(doc.filename);
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (e) {
+        console.warn('Could not delete file:', e.message);
+      }
+    }
 
+    await PatientDocument.deleteOne({ _id: doc._id });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -214,7 +256,7 @@ router.get('/activity-log', protect, requireRole('admin', 'hospital_officer'), a
       ...recentAppointments.map((a) => ({
         id: a._id.toString(),
         action: 'Appointment',
-        detail: `${a.department || 'General'} — ${a.status || 'Scheduled'}`,
+        detail: `${a.assignedDepartment || a.preferredDepartment || 'General'} — ${a.status || 'Scheduled'}`,
         actor: a.patientName || 'Patient',
         timestamp: a.createdAt,
       })),
@@ -263,7 +305,23 @@ router.put('/profile', protect, requireRole('admin', 'hospital_officer'), async 
 router.get('/financial-cases', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
     const cases = await FinancialCase.find().sort({ createdAt: -1 });
-    res.json({ success: true, cases });
+    res.json({
+      success: true,
+      cases: cases.map((financialCase) => {
+        const data = financialCase.toObject();
+        Object.assign(data, getConfirmedAccounting(data));
+        data.donations = (data.donations || [])
+          .filter((donation) => donation.status === 'Paid' || donation.paymentStatus === 'success')
+          .map((donation) => ({
+            donorName: donation.donorName,
+            amount: donation.amount,
+            paymentMethod: donation.paymentMethod || 'Chapa',
+            status: 'Paid',
+            donatedAt: donation.paidAt || donation.donatedAt,
+          }));
+        return data;
+      }),
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -283,12 +341,15 @@ router.post('/financial-cases', protect, requireRole('admin', 'hospital_officer'
 router.put('/financial-cases/:id/status', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
     const { status } = req.body;
-    const financialCase = await FinancialCase.findOneAndUpdate(
-      { caseId: req.params.id },
-      { $set: { status } },
-      { new: true, runValidators: true }
-    );
+    if (!['Active', 'Closed'].includes(status))
+      return res.status(400).json({ success: false, message: 'Status must be Active or Closed' });
+    const financialCase = await FinancialCase.findOne({ caseId: req.params.id });
     if (!financialCase) return res.status(404).json({ success: false, message: 'Case not found' });
+    const accounting = getConfirmedAccounting(financialCase);
+    if (status === 'Active' && accounting.raisedAmount + accounting.pendingAmount >= financialCase.targetAmount)
+      return res.status(409).json({ success: false, message: 'A fully funded case cannot be reopened' });
+    financialCase.status = status;
+    await financialCase.save();
     res.json({ success: true, case: financialCase });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
@@ -296,10 +357,14 @@ router.put('/financial-cases/:id/status', protect, requireRole('admin', 'hospita
 });
 
 // DELETE /api/admin/financial-cases/:id
-router.delete('/financial-cases/:id', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
+router.delete('/financial-cases/:id', protect, requireRole('admin'), async (req, res) => {
   try {
-    const financialCase = await FinancialCase.findOneAndDelete({ caseId: req.params.id });
+    const financialCase = await FinancialCase.findOne({ caseId: req.params.id });
     if (!financialCase) return res.status(404).json({ success: false, message: 'Case not found' });
+    if (financialCase.donations?.length) {
+      return res.status(409).json({ success: false, message: 'Cases with donation history cannot be deleted. Close the case instead.' });
+    }
+    await financialCase.deleteOne();
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -333,8 +398,24 @@ router.get('/users', protect, requireRole('admin', 'hospital_officer'), async (r
 // DELETE /api/admin/users/:email
 router.delete('/users/:email', protect, requireRole('admin'), async (req, res) => {
   try {
-    const user = await User.findOneAndDelete({ email: decodeURIComponent(req.params.email) });
+    const user = await User.findOne({ email: req.params.email });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (user._id.toString() === req.user.id) {
+      return res.status(409).json({ success: false, message: 'You cannot delete the account currently in use' });
+    }
+    if (user.role !== 'patient') {
+      return res.status(409).json({ success: false, message: 'Staff accounts cannot be deleted from the patient management screen' });
+    }
+    const [appointmentCount, documentCount, queueCount, caseCount] = await Promise.all([
+      Appointment.countDocuments({ $or: [{ bookedByUserId: user._id.toString() }, { patientId: user.patientId }] }),
+      PatientDocument.countDocuments({ patientId: user.patientId }),
+      Queue.countDocuments({ patientId: user.patientId }),
+      FinancialCase.countDocuments({ patientId: user.patientId }),
+    ]);
+    if (appointmentCount || documentCount || queueCount || caseCount) {
+      return res.status(409).json({ success: false, message: 'This patient has linked medical or financial records and cannot be deleted' });
+    }
+    await user.deleteOne();
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -346,7 +427,7 @@ router.delete('/users/:email', protect, requireRole('admin'), async (req, res) =
 // GET /api/admin/hospitals
 router.get('/hospitals', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
-    const hospitals = await Hospital.find().sort({ name: 1 });
+    const hospitals = await Hospital.find({ hospitalId: 'HOSP-001' });
     const serialized = hospitals.map((h) => ({
       id: h.hospitalId,
       name: h.name,
@@ -365,17 +446,14 @@ router.get('/hospitals', protect, requireRole('admin', 'hospital_officer'), asyn
 // POST /api/admin/hospitals
 router.post('/hospitals', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
-    const count = await Hospital.countDocuments();
-    const hospitalId = `HOSP-${String(count + 1).padStart(3, '0')}`;
-    const hospital = await Hospital.create({ ...req.body, hospitalId });
-    res.status(201).json({ success: true, hospital });
+    return res.status(403).json({ success: false, message: 'HealFund supports Zewditu Memorial Hospital only' });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
 });
 
 // PUT /api/admin/hospitals/:id/verify  (toggle verified)
-router.put('/hospitals/:id/verify', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
+router.put('/hospitals/:id/verify', protect, requireRole('admin'), async (req, res) => {
   try {
     const hospital = await Hospital.findOne({ hospitalId: req.params.id });
     if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found' });
@@ -390,6 +468,9 @@ router.put('/hospitals/:id/verify', protect, requireRole('admin', 'hospital_offi
 // DELETE /api/admin/hospitals/:id
 router.delete('/hospitals/:id', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
+    if (req.params.id === 'HOSP-001') {
+      return res.status(403).json({ success: false, message: 'Zewditu Memorial Hospital is the sole HealFund hospital and cannot be deleted' });
+    }
     const hospital = await Hospital.findOneAndDelete({ hospitalId: req.params.id });
     if (!hospital) return res.status(404).json({ success: false, message: 'Hospital not found' });
     res.json({ success: true });
@@ -410,6 +491,81 @@ router.get('/queue', protect, requireRole('admin', 'hospital_officer'), async (r
   }
 });
 
+// PUT /api/admin/queue/reorder  — must be defined BEFORE /:token routes
+router.put('/queue/reorder', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
+  try {
+    const { action, token, direction } = req.body;
+    if (!['move', 'prioritize_urgency'].includes(action))
+      return res.status(400).json({ success: false, message: 'Unknown action' });
+    if (action === 'move' && !['up', 'down'].includes(direction))
+      return res.status(400).json({ success: false, message: 'Direction must be up or down' });
+
+    // Fetch ALL active queue entries. Sort by estimatedTime first, then by _id
+    // as a stable tiebreaker so entries with identical times have a consistent order.
+    const queue = await Queue.find({ status: { $nin: ['Completed', 'Cancelled', 'No Show'] } })
+      .sort({ estimatedTime: 1, _id: 1 });
+
+    const moveIndex = action === 'move' ? queue.findIndex((entry) => entry.token === token) : -1;
+    if (action === 'move' && moveIndex === -1)
+      return res.status(404).json({ success: false, message: 'Token not found in queue' });
+    if (action === 'move' && (moveIndex + (direction === 'up' ? -1 : 1) < 0 || moveIndex + (direction === 'up' ? -1 : 1) >= queue.length))
+      return res.status(400).json({ success: false, message: 'Cannot move in that direction' });
+
+    // Ensure every entry has a unique estimatedTime (10-min apart) so swaps are
+    // meaningful even when entries were created with the same timestamp.
+    const baseTime = queue[0]?.estimatedTime
+      ? new Date(queue[0].estimatedTime)
+      : new Date();
+
+    for (let i = 0; i < queue.length; i++) {
+      const expectedTime = new Date(baseTime.getTime() + i * 10 * 60 * 1000);
+      // Only write if the time needs to change (avoids unnecessary DB writes)
+      if (!queue[i].estimatedTime || queue[i].estimatedTime.getTime() !== expectedTime.getTime()) {
+        await Queue.findByIdAndUpdate(queue[i]._id, { estimatedTime: expectedTime });
+        queue[i].estimatedTime = expectedTime; // keep local copy in sync
+      }
+    }
+
+    if (action === 'move') {
+      const idx = moveIndex;
+      const swapIdx = idx + (direction === 'up' ? -1 : 1);
+
+      // Swap the now-distinct estimatedTime values
+      const timeA = queue[idx].estimatedTime;
+      const timeB = queue[swapIdx].estimatedTime;
+
+      await Queue.findByIdAndUpdate(queue[idx]._id, { estimatedTime: timeB });
+      await Queue.findByIdAndUpdate(queue[swapIdx]._id, { estimatedTime: timeA });
+
+    } else if (action === 'prioritize_urgency') {
+      const URGENCY_ORDER = { Emergency: 0, High: 1, Medium: 2, Low: 3, Routine: 4 };
+
+      // Sort by urgency priority, preserving relative order within same urgency
+      const sorted = [...queue].sort((a, b) => {
+        const ua = URGENCY_ORDER[a.urgency] ?? 5;
+        const ub = URGENCY_ORDER[b.urgency] ?? 5;
+        return ua - ub;
+      });
+
+      for (let i = 0; i < sorted.length; i++) {
+        const newTime = new Date(baseTime.getTime() + i * 10 * 60 * 1000);
+        await Queue.findByIdAndUpdate(sorted[i]._id, { estimatedTime: newTime });
+      }
+    }
+
+    const updatedQueue = await Queue.find().sort({ estimatedTime: 1 });
+    await Appointment.bulkWrite(updatedQueue.filter((entry) => entry.appointmentId).map((entry) => ({
+      updateOne: {
+        filter: { appointmentId: entry.appointmentId },
+        update: { $set: { estimatedTime: entry.estimatedTime } },
+      },
+    })));
+    res.json({ success: true, queue: updatedQueue });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // PUT /api/admin/queue/:token/status
 router.put('/queue/:token/status', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
@@ -420,6 +576,12 @@ router.put('/queue/:token/status', protect, requireRole('admin', 'hospital_offic
       { new: true, runValidators: true }
     );
     if (!item) return res.status(404).json({ success: false, message: 'Queue token not found' });
+    if (status === 'Completed' || status === 'Cancelled') {
+      await Appointment.findOneAndUpdate(
+        { queueToken: item.token },
+        { status, reviewedAt: new Date() }
+      );
+    }
     res.json({ success: true, item });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
@@ -431,7 +593,17 @@ router.delete('/queue/:token', protect, requireRole('admin', 'hospital_officer')
   try {
     const item = await Queue.findOneAndDelete({ token: req.params.token });
     if (!item) return res.status(404).json({ success: false, message: 'Queue token not found' });
-    res.json({ success: true });
+
+    // Sync appointment cancellation
+    if (item.appointmentId || item.token) {
+      await Appointment.findOneAndUpdate(
+        { $or: [{ queueToken: item.token }, { appointmentId: item.appointmentId }] },
+        { status: 'Cancelled', queueToken: '', adminNote: 'Removed from queue by admin.' }
+      );
+    }
+
+    const remainingQueue = await Queue.find().sort({ estimatedTime: 1 });
+    res.json({ success: true, queue: remainingQueue });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

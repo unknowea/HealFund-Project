@@ -1,15 +1,24 @@
 import express from 'express';
 import Queue from '../models/Queue.js';
+import User from '../models/User.js';
+import Appointment from '../models/Appointment.js';
 import { protect, requireRole } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// GET /api/queue — public (patients check their token)
-router.get('/', async (req, res) => {
+// GET /api/queue — patients see their own queue entries; staff can filter all entries
+router.get('/', protect, async (req, res) => {
   try {
     const { patientId, token } = req.query;
     const filter = {};
-    if (patientId) filter.patientId = patientId;
+    const isStaff = req.user.role === 'admin' || req.user.role === 'hospital_officer';
+    if (isStaff) {
+      if (patientId) filter.patientId = patientId;
+    } else {
+      const user = await User.findById(req.user.id).select('patientId').lean();
+      if (!user?.patientId) return res.json({ success: true, queue: [] });
+      filter.patientId = user.patientId;
+    }
     if (token) filter.token = token;
 
     const queue = await Queue.find(filter).sort({ estimatedTime: 1 });
@@ -19,10 +28,17 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/queue/:token — public
-router.get('/:token', async (req, res) => {
+// GET /api/queue/:token — patients can only access their own token
+router.get('/:token', protect, async (req, res) => {
   try {
-    const item = await Queue.findOne({ token: req.params.token });
+    const isStaff = req.user.role === 'admin' || req.user.role === 'hospital_officer';
+    const filter = { token: req.params.token };
+    if (!isStaff) {
+      const user = await User.findById(req.user.id).select('patientId').lean();
+      if (!user?.patientId) return res.status(404).json({ success: false, message: 'Queue token not found' });
+      filter.patientId = user.patientId;
+    }
+    const item = await Queue.findOne(filter);
     if (!item)
       return res.status(404).json({ success: false, message: 'Queue token not found' });
     res.json({ success: true, item });
@@ -42,6 +58,12 @@ router.put('/:token/status', protect, requireRole('admin', 'hospital_officer'), 
     );
     if (!item)
       return res.status(404).json({ success: false, message: 'Queue token not found' });
+    if (status === 'Completed' || status === 'Cancelled') {
+      await Appointment.findOneAndUpdate(
+        { queueToken: item.token },
+        { status, reviewedAt: new Date() }
+      );
+    }
     res.json({ success: true, item });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });

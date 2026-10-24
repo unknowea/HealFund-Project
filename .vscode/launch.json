@@ -5,36 +5,36 @@
       "type": "node",
       "request": "launch",
       "name": "1. Start Backend API Server (Port 5000)",
-      "program": "${workspaceFolder}/server/server.js",
-      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/backend/server.js",
+      "cwd": "${workspaceFolder}/backend",
       "console": "integratedTerminal"
     },
     {
       "type": "node",
       "request": "launch",
-      "name": "2. Start Main Patient Portal (Port 3000)",
+      "name": "2. Start User Frontend (Port 3000)",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--port", "3000"],
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/user frontend",
       "console": "integratedTerminal"
     },
     {
       "type": "node",
       "request": "launch",
-      "name": "3. Start Dedicated Admin Portal (Port 3001)",
+      "name": "3. Start Admin Frontend (Port 3001)",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--port", "3001"],
-      "cwd": "${workspaceFolder}/frontend-admin",
+      "cwd": "${workspaceFolder}/admin frontend",
       "console": "integratedTerminal"
     }
   ],
   "compounds": [
     {
-      "name": "🚀 Launch Full HealFund Suite (Backend + Patient + Admin)",
+      "name": "🚀 Launch Full HealFund Suite (Backend + User + Admin)",
       "configurations": [
         "1. Start Backend API Server (Port 5000)",
-        "2. Start Main Patient Portal (Port 3000)",
-        "3. Start Dedicated Admin Portal (Port 3001)"
+        "2. Start User Frontend (Port 3000)",
+        "3. Start Admin Frontend (Port 3001)"
       ]
     }
   ]

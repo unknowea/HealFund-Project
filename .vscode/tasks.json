@@ -14,21 +14,27 @@
     {
       "type": "shell",
       "label": "Start Backend Server (Port 5000)",
-      "command": "node server/server.js",
-      "problemMatcher": []
-    },
-    {
-      "type": "shell",
-      "label": "Start Main Patient Portal (Port 3000)",
-      "command": "npx vite --port 3000",
-      "problemMatcher": []
-    },
-    {
-      "type": "shell",
-      "label": "Start Dedicated Admin Portal (Port 3001)",
-      "command": "npx vite --port 3001",
+      "command": "npm run dev",
       "options": {
-        "cwd": "${workspaceFolder}/frontend-admin"
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "type": "shell",
+      "label": "Start User Frontend (Port 3000)",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/user frontend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "type": "shell",
+      "label": "Start Admin Frontend (Port 3001)",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/admin frontend"
       },
       "problemMatcher": []
     }

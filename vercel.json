@@ -1,0 +1,49 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "backend": {
+      "root": "backend",
+      "framework": "express",
+      "entrypoint": "server.js"
+    },
+    "user_frontend": {
+      "root": "user frontend",
+      "framework": "vite",
+      "buildCommand": "npm run build",
+      "outputDirectory": "dist",
+      "rewrites": [
+        { "source": "/(.*)", "destination": "/index.html" }
+      ]
+    },
+    "admin_frontend": {
+      "root": "admin frontend",
+      "framework": "vite",
+      "buildCommand": "npm run build -- --base=/admin/",
+      "outputDirectory": "dist",
+      "routes": [
+        {
+          "src": "/admin/?$",
+          "transforms": [
+            { "type": "request.path", "op": "set", "args": "/" }
+          ]
+        },
+        {
+          "src": "/admin/(.*)",
+          "transforms": [
+            { "type": "request.path", "op": "set", "args": "/$1" }
+          ]
+        }
+      ],
+      "rewrites": [
+        { "source": "/(.*)", "destination": "/index.html" }
+      ]
+    }
+  },
+  "rewrites": [
+    { "source": "/api", "destination": { "service": "backend" } },
+    { "source": "/api/(.*)", "destination": { "service": "backend" } },
+    { "source": "/admin", "destination": { "service": "admin_frontend" } },
+    { "source": "/admin/(.*)", "destination": { "service": "admin_frontend" } },
+    { "source": "/(.*)", "destination": { "service": "user_frontend" } }
+  ]
+}

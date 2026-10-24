@@ -1,8 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import mongoose from 'mongoose';
 import connectDB from './config/db.js';
 
 // Route imports
@@ -13,30 +12,34 @@ import queueRoutes from './routes/queue.js';
 import financialRoutes from './routes/financial.js';
 import fileRoutes from './routes/files.js';
 import messageRoutes from './routes/messages.js';
-import conversationRoutes from './routes/conversations.js';
 import adminRoutes from './routes/admin.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Connect to MongoDB
-connectDB();
-
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5000;
+const allowedOrigins = [
+  process.env.USER_FRONTEND_URL,
+  process.env.ADMIN_FRONTEND_URL,
+  process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
+  process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`,
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+].filter(Boolean);
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  return allowedOrigins.includes(origin) || /^https:\/\/healfund[a-z0-9-]*\.onrender\.com$/i.test(origin);
+};
 
 // ─── CORS ──────────────────────────────────────────────────────────────────────
-// Allow all localhost origins in development + configured production URLs
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow Postman/curl (no origin) or any localhost port during development
-      if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
-      // Allow configured production frontend URLs
-      const allowed = [process.env.USER_FRONTEND_URL, process.env.ADMIN_FRONTEND_URL].filter(Boolean);
-      if (allowed.includes(origin)) return callback(null, true);
       callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
@@ -44,15 +47,12 @@ app.use(
 );
 
 // ─── BODY PARSER ───────────────────────────────────────────────────────────────
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '3mb' }));
+app.use(express.urlencoded({ extended: true, limit: '3mb' }));
 
 app.get('/', (req, res) => {
   res.json({ success: true, message: 'HealFund Backend API running', version: '2.0.0' });
 });
-
-// ─── STATIC UPLOADS ────────────────────────────────────────────────────────────
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/hospitals', hospitalRoutes);
@@ -61,12 +61,17 @@ app.use('/api/queue', queueRoutes);
 app.use('/api/financial-cases', financialRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/messages', messageRoutes);
-app.use('/api/conversations', conversationRoutes);
+app.use('/api/admin-messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
 
 // ─── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ success: true, message: 'HealFund API is running', timestamp: new Date() });
+  const databaseReady = mongoose.connection.readyState === 1;
+  res.status(databaseReady ? 200 : 503).json({
+    success: databaseReady,
+    message: databaseReady ? 'HealFund API is running' : 'Database is unavailable',
+    timestamp: new Date(),
+  });
 });
 
 // ─── PUBLIC STATS (for home page) ──────────────────────────────────────────────
@@ -74,7 +79,7 @@ app.get('/api/public/stats', async (req, res) => {
   try {
     const [totalUsers, totalHospitals, totalFinancialCases] = await Promise.all([
       (await import('./models/User.js')).default.countDocuments({ role: 'patient' }),
-      (await import('./models/Hospital.js')).default.countDocuments(),
+      (await import('./models/Hospital.js')).default.countDocuments({ hospitalId: 'HOSP-001' }),
       (await import('./models/FinancialCase.js')).default.countDocuments({ status: 'Active' }),
     ]);
     res.json({ success: true, stats: { totalUsers, totalHospitals, totalFinancialCases } });
@@ -97,6 +102,8 @@ app.use((err, req, res, next) => {
     message: err.message || 'Internal server error',
   });
 });
+
+await connectDB();
 
 app.listen(PORT, () => {
   console.log(`HealFund backend running on http://localhost:${PORT}`);
