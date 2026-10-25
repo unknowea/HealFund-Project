@@ -540,9 +540,12 @@ router.put('/users/:email', protect, requireRole('admin', 'hospital_officer'), a
 // POST /api/admin/users/admins — create an admin account (owner only)
 router.post('/users/admins', protect, requireRole('admin'), requireOwner, async (req, res) => {
   try {
-    const { name, email, password } = req.body;
-    if (!name?.trim() || !email?.trim() || !password) {
-      return res.status(400).json({ success: false, message: 'Name, email, and password are required' });
+    const { name, email, password, gender } = req.body;
+    if (!name?.trim() || !email?.trim() || !password || !gender) {
+      return res.status(400).json({ success: false, message: 'Name, email, password, and gender are required' });
+    }
+    if (!['Male', 'Female'].includes(gender)) {
+      return res.status(400).json({ success: false, message: 'Select Male or Female for gender' });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
@@ -560,6 +563,7 @@ router.post('/users/admins', protect, requireRole('admin'), requireOwner, async 
       name: name.trim(),
       email: normalizedEmail,
       password,
+      gender,
       role: 'admin',
     });
     res.status(201).json({ success: true, user: { id: user._id, adminId: user.adminId, name: user.name, email: user.email, role: user.role } });
@@ -593,8 +597,21 @@ router.delete('/users/:email', protect, requireRole('admin', 'hospital_officer')
     if (user._id.toString() === req.user.id) {
       return res.status(409).json({ success: false, message: 'You cannot delete the account currently in use' });
     }
+    if (user.role === 'hospital_officer') {
+      const requester = req.user.role === 'admin'
+        ? await User.findById(req.user.id).select('email role')
+        : null;
+      const isOwner = requester?.role === 'admin' &&
+        requester.email.toLowerCase() === ownerEmail &&
+        req.user.email?.toLowerCase() === ownerEmail;
+      if (!isOwner) {
+        return res.status(403).json({ success: false, message: 'Only the HealFund owner can delete staff accounts' });
+      }
+      await user.deleteOne();
+      return res.json({ success: true });
+    }
     if (user.role !== 'patient') {
-      return res.status(409).json({ success: false, message: 'Staff accounts cannot be deleted from the patient management screen' });
+      return res.status(409).json({ success: false, message: 'Admin accounts must be removed from admin account management' });
     }
     if (req.user.role === 'hospital_officer' && user.createdByUserId?.toString() !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Staff can only delete patient accounts they created' });

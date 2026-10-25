@@ -43,28 +43,27 @@ const validatePassword = (pwd) => {
   return { hasLetter, hasNumber, hasSpecial, isLong, valid: hasLetter && hasNumber && hasSpecial && isLong };
 };
 
-function GenderChoice({ value, onChange, name, required = false, isAm = false }) {
+function GenderChoice({ value, onChange, required = false, isAm = false }) {
   return (
     <fieldset className="gender-choice-field">
       <legend>{isAm ? 'ጾታ' : 'Gender'}</legend>
-      <div className="gender-choice-options">
+      <div className="gender-choice-options" role="group" aria-label={isAm ? 'ጾታ' : 'Gender'}>
         {[
           { value: 'Male', label: isAm ? 'ወንድ' : 'Male', icon: 'fa-mars' },
           { value: 'Female', label: isAm ? 'ሴት' : 'Female', icon: 'fa-venus' },
         ].map((option) => (
-          <label className="gender-choice-option" key={option.value}>
-            <input
-              type="radio"
-              name={name}
-              value={option.value}
-              checked={value === option.value}
-              onChange={() => onChange(option.value)}
-              required={required && option.value === 'Male'}
-            />
-            <span><i className={`fas ${option.icon}`} aria-hidden="true"></i>{option.label}</span>
-          </label>
+          <button
+            className={`gender-choice-button${value === option.value ? ' selected' : ''}`}
+            type="button"
+            key={option.value}
+            aria-pressed={value === option.value}
+            onClick={() => onChange(option.value)}
+          >
+            <i className={`fas ${option.icon}`} aria-hidden="true"></i>{option.label}
+          </button>
         ))}
       </div>
+      {required && !value && <span className="gender-choice-error">{isAm ? 'እባክዎ ጾታ ይምረጡ።' : 'Choose Male or Female.'}</span>}
     </fieldset>
   );
 }
@@ -539,7 +538,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, currentLang
                 <label>{isAm ? 'ዕድሜ *' : 'Age *'}</label>
                 <input type="number" value={age} onChange={(e) => setAge(e.target.value)} min="1" max="120" placeholder="e.g. 30" required />
               </div>
-              <GenderChoice name="signup-gender" value={gender} onChange={setGender} required isAm={isAm} />
+              <GenderChoice value={gender} onChange={setGender} required isAm={isAm} />
             </div>
 
             <div className="form-group">

@@ -1381,61 +1381,68 @@ body {
   background: #f4f8f5;
 }
 
-.gender-choice-option {
-  position: relative;
-  min-width: 0;
-  cursor: pointer;
-}
-
-.gender-choice-option input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  clip-path: inset(50%);
-}
-
-.gender-choice-option span {
+.gender-choice-button {
   display: flex;
-  min-height: 36px;
+  min-width: 0;
+  min-height: 40px;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 7px 10px;
+  padding: 8px 12px;
   border: 1px solid transparent;
   border-radius: 8px;
+  background: transparent;
   color: #637567;
+  font: inherit;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
-.gender-choice-option span i {
-  color: #829488;
-}
-
-.gender-choice-option:hover span {
+.gender-choice-button:hover {
   color: #0d5a3d;
   background: #eaf4ed;
 }
 
-.gender-choice-option input:checked + span {
+.gender-choice-button:active {
+  transform: scale(0.98);
+}
+
+.gender-choice-button:focus-visible {
+  outline: 3px solid rgba(7, 137, 48, 0.25);
+  outline-offset: 1px;
+}
+
+.gender-choice-button.selected {
   color: #0d5a3d;
   background: #fff;
   border-color: #a9cfb5;
   box-shadow: 0 1px 3px rgba(13, 90, 61, 0.1);
 }
 
-.gender-choice-option input:checked + span i {
+.gender-choice-button i {
+  color: #829488;
+}
+
+.gender-choice-button.selected i {
   color: #078930;
 }
 
-.gender-choice-option input:focus-visible + span {
-  outline: 3px solid rgba(7, 137, 48, 0.25);
-  outline-offset: 1px;
+.gender-choice-error {
+  display: block;
+  margin-top: 5px;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+@media (max-width: 400px) {
+  .gender-choice-button {
+    gap: 5px;
+    padding: 8px 6px;
+  }
 }
 
 .admin-form-field input,

@@ -2,25 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { getAppointments, getAppointmentFileBlob, createAppointment, uploadFile, uploadAdditionalAppointmentDocs, sendMessage, getProfile, updateProfile, getPublicStats } from '../api.js';
 
-function GenderChoice({ value, onChange, name, isAm = false }) {
+function GenderChoice({ value, onChange, isAm = false }) {
   return (
     <fieldset className="gender-choice-field">
       <legend>{isAm ? 'ጾታ' : 'Gender'}</legend>
-      <div className="gender-choice-options">
+      <div className="gender-choice-options" role="group" aria-label={isAm ? 'ጾታ' : 'Gender'}>
         {[
           { value: 'Male', label: isAm ? 'ወንድ' : 'Male', icon: 'fa-mars' },
           { value: 'Female', label: isAm ? 'ሴት' : 'Female', icon: 'fa-venus' },
         ].map((option) => (
-          <label className="gender-choice-option" key={option.value}>
-            <input
-              type="radio"
-              name={name}
-              value={option.value}
-              checked={value === option.value}
-              onChange={() => onChange(option.value)}
-            />
-            <span><i className={`fas ${option.icon}`} aria-hidden="true"></i>{option.label}</span>
-          </label>
+          <button
+            className={`gender-choice-button${value === option.value ? ' selected' : ''}`}
+            type="button"
+            key={option.value}
+            aria-pressed={value === option.value}
+            onClick={() => onChange(option.value)}
+          >
+            <i className={`fas ${option.icon}`} aria-hidden="true"></i>{option.label}
+          </button>
         ))}
       </div>
     </fieldset>
@@ -786,7 +785,7 @@ export default function PatientPortal({
                         onChange={(e) => setBookPatientAge(e.target.value)}
                       />
                     </div>
-                    <GenderChoice name="appointment-patient-gender" value={bookPatientGender} onChange={setBookPatientGender} isAm={isAm} />
+                    <GenderChoice value={bookPatientGender} onChange={setBookPatientGender} isAm={isAm} />
                   </div>
                 </div>
               )}
@@ -1074,7 +1073,7 @@ export default function PatientPortal({
                   <label>{isAm ? 'ዕድሜ' : 'Age'}</label>
                   <input type="number" value={editAge} onChange={(e) => setEditAge(e.target.value)} min="1" max="120" />
                 </div>
-                <GenderChoice name="profile-gender" value={editGender} onChange={setEditGender} isAm={isAm} />
+                <GenderChoice value={editGender} onChange={setEditGender} isAm={isAm} />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label>{isAm ? 'ቦታ' : 'Location'}</label>

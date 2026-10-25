@@ -58,28 +58,27 @@ const fmtDate = (iso) => {
   });
 };
 
-function GenderChoice({ value, onChange, name, required = false }) {
+function GenderChoice({ value, onChange, required = false }) {
   return (
     <fieldset className="gender-choice-field">
       <legend>Gender</legend>
-      <div className="gender-choice-options">
+      <div className="gender-choice-options" role="group" aria-label="Gender">
         {[
           { value: 'Male', icon: 'fa-mars' },
           { value: 'Female', icon: 'fa-venus' },
         ].map((option) => (
-          <label className="gender-choice-option" key={option.value}>
-            <input
-              type="radio"
-              name={name}
-              value={option.value}
-              checked={value === option.value}
-              onChange={() => onChange(option.value)}
-              required={required && option.value === 'Male'}
-            />
-            <span><i className={`fas ${option.icon}`} aria-hidden="true"></i>{option.value}</span>
-          </label>
+          <button
+            className={`gender-choice-button${value === option.value ? ' selected' : ''}`}
+            type="button"
+            key={option.value}
+            aria-pressed={value === option.value}
+            onClick={() => onChange(option.value)}
+          >
+            <i className={`fas ${option.icon}`} aria-hidden="true"></i>{option.value}
+          </button>
         ))}
       </div>
+      {required && !value && <span className="gender-choice-error">Choose Male or Female.</span>}
     </fieldset>
   );
 }
@@ -113,8 +112,10 @@ function AdminLogin({ onLoginSuccess }) {
       } else {
         setError(data.message || 'Invalid credentials');
       }
-    } catch {
-      setError('Server unreachable. Make sure the backend is running.');
+    } catch (err) {
+      setError(err instanceof TypeError
+        ? 'Server unreachable. Make sure the backend is running.'
+        : err.message || 'Unable to sign in. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -641,7 +642,7 @@ function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', gender: 'Male', location: '', status: 'Verified' });
-  const [adminForm, setAdminForm] = useState({ name: '', email: '', password: '' });
+  const [adminForm, setAdminForm] = useState({ name: '', email: '', password: '', gender: '' });
   const [patientForm, setPatientForm] = useState({ name: '', email: '', password: '', age: '', gender: 'Male', location: '' });
   const [showAdminForm, setShowAdminForm] = useState(false);
   const [showPatientForm, setShowPatientForm] = useState(false);
@@ -701,6 +702,10 @@ function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer
 
   const handleCreateAdmin = async (event) => {
     event.preventDefault();
+    if (!adminForm.gender) {
+      setError('Choose Male or Female for the admin account.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -710,7 +715,7 @@ function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.message || 'Could not create admin account');
-      setAdminForm({ name: '', email: '', password: '' });
+      setAdminForm({ name: '', email: '', password: '', gender: '' });
       setShowAdminForm(false);
       await load();
     } catch (err) {
@@ -767,7 +772,6 @@ function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer
             <label className="admin-form-field">Initial password<input required type="password" minLength={8} autoComplete="new-password" value={patientForm.password} onChange={(event) => setPatientForm({ ...patientForm, password: event.target.value })} /></label>
             <label className="admin-form-field">Age<input required type="number" min="1" max="120" step="1" value={patientForm.age} onChange={(event) => setPatientForm({ ...patientForm, age: event.target.value })} /></label>
             <GenderChoice
-              name="new-patient-gender"
               value={patientForm.gender}
               onChange={(gender) => setPatientForm({ ...patientForm, gender })}
               required
@@ -794,6 +798,11 @@ function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer
               <label className="admin-form-field">Name<input required value={adminForm.name} onChange={(event) => setAdminForm({ ...adminForm, name: event.target.value })} /></label>
               <label className="admin-form-field">Email<input required type="email" value={adminForm.email} onChange={(event) => setAdminForm({ ...adminForm, email: event.target.value })} /></label>
               <label className="admin-form-field">Temporary password<input required type="password" minLength={8} value={adminForm.password} onChange={(event) => setAdminForm({ ...adminForm, password: event.target.value })} /></label>
+              <GenderChoice
+                value={adminForm.gender}
+                onChange={(gender) => setAdminForm({ ...adminForm, gender })}
+                required
+              />
               <button className="btn btn-success" type="submit" disabled={saving}><i className="fas fa-user-plus"></i>{saving ? 'Creating…' : 'Create Admin'}</button>
             </form>
           )}
@@ -848,8 +857,8 @@ function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer
                       {u.email.toLowerCase() !== (currentUserEmail || '').toLowerCase() &&
                         ((u.role === 'patient' && canDeleteUsers) ||
                           (u.role === 'patient' && isHospitalOfficer && u.createdByCurrentUser) ||
-                          (u.role === 'admin' && isOwner)) && (
-                        <button className="admin-btn-danger" type="button" aria-label={`Delete ${u.role === 'admin' ? 'admin' : 'user'} ${u.email}`} title={u.role === 'admin' ? 'Delete admin' : 'Delete user'} onClick={() => setConfirmDelete(u)}>
+                          ((u.role === 'admin' || u.role === 'hospital_officer') && isOwner)) && (
+                        <button className="admin-btn-danger" type="button" aria-label={`Delete ${u.role === 'admin' ? 'admin' : u.role === 'hospital_officer' ? 'staff' : 'patient'} ${u.email}`} title={u.role === 'admin' ? 'Delete admin' : u.role === 'hospital_officer' ? 'Delete staff account' : 'Delete patient'} onClick={() => setConfirmDelete(u)}>
                           <i className="fas fa-trash"></i>
                         </button>
                       )}
@@ -884,7 +893,6 @@ function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer
             </div>
             <label className="profile-edit-field">Name<input required value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} /></label>
             <GenderChoice
-              name="edit-patient-gender"
               value={editForm.gender}
               onChange={(gender) => setEditForm({ ...editForm, gender })}
               required
