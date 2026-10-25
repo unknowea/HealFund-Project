@@ -1,6 +1,5 @@
 import nodemailer from 'nodemailer';
 
-// Create transporter based on environment variables
 const createTransporter = () => {
   const host = process.env.SMTP_HOST || process.env.EMAIL_HOST;
   const port = parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT || '587', 10);
@@ -35,32 +34,8 @@ const formatSender = () => {
 };
 
 const sendEmail = async (mailOptions) => {
-  if (process.env.RESEND_API_KEY) {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: mailOptions.from,
-        to: [mailOptions.to],
-        subject: mailOptions.subject,
-        text: mailOptions.text,
-        html: mailOptions.html,
-        ...(mailOptions.replyTo ? { reply_to: mailOptions.replyTo } : {}),
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(result.message || `Resend email request failed (${response.status})`);
-    }
-    return { messageId: result.id };
-  }
-
   if (!transporter) {
-    throw new Error('Email delivery is not configured. Set RESEND_API_KEY or configure SMTP in the backend environment.');
+    throw new Error('Email delivery is not configured. Set EMAIL_SERVICE=gmail, EMAIL_USER, and EMAIL_PASS in the backend environment.');
   }
 
   return transporter.sendMail(mailOptions);
@@ -107,12 +82,6 @@ export const sendCustomerReplyEmail = async ({ toEmail, recipientName, category,
   }
 };
 
-/**
- * Send an OTP verification email to the user
- * @param {string} toEmail - Recipient email address
- * @param {string} otp - 6-digit OTP code
- * @param {string} purpose - Purpose of OTP ('signup', 'login', 'reset-password')
- */
 export const sendOtpEmail = async (toEmail, otp, purpose = 'signup') => {
   let purposeTitle = 'Account Verification';
   let purposeDescription = 'Thank you for choosing HealFund. Use the One-Time Password (OTP) below to verify your email address.';
@@ -174,16 +143,14 @@ export const sendOtpEmail = async (toEmail, otp, purpose = 'signup') => {
 
   const textContent = `HealFund ${purposeTitle}\n\nYour One-Time Password (OTP) is: ${otp}\n\nThis code is valid for 10 minutes.\nNever share this code with anyone.`;
 
-  const mailOptions = {
-    from: formatSender(),
-    to: toEmail,
-    subject: `${otp} is your HealFund verification code`,
-    text: textContent,
-    html: htmlContent,
-  };
-
   try {
-    const info = await sendEmail(mailOptions);
+    const info = await sendEmail({
+      from: formatSender(),
+      to: toEmail,
+      subject: `${otp} is your HealFund verification code`,
+      text: textContent,
+      html: htmlContent,
+    });
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('Failed to send email:', error);

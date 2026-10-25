@@ -36,7 +36,10 @@ router.post('/send-otp', otpLimiter, async (req, res) => {
     if (purpose === 'signup') {
       const existingUser = await User.findOne({ email: normalizedEmail });
       if (existingUser) {
-        return res.status(400).json({ success: false, message: 'Email is already registered. Please log in.' });
+        return res.status(400).json({
+          success: false,
+          message: 'Another user already has an account with this email address. Please sign in or use a different email.',
+        });
       }
     }
 
@@ -180,18 +183,82 @@ router.post('/login', authLimiter, async (req, res) => {
   }
 });
 
+// POST /api/auth/admin-login
+router.post('/admin-login', authLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password required' });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Email and password are incorrect' });
+    }
+    if (!await user.matchPassword(password)) {
+      return res.status(401).json({ success: false, message: 'Password is incorrect' });
+    }
+    if (user.status === 'Suspended') {
+      return res.status(403).json({ success: false, message: 'This account has been suspended. Contact support.' });
+    }
+    if (!['admin', 'hospital_officer'].includes(user.role)) {
+      return res.status(403).json({ success: false, message: 'Access denied. Staff credentials required.' });
+    }
+
+    const { password: _, ...userWithoutPass } = user.toObject();
+    return res.json({ success: true, token: generateToken(user), user: userWithoutPass });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// PUT /api/auth/change-password — change the signed-in user's password
+router.put('/change-password', protect, authLimiter, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current and new passwords are required' });
+    }
+    if (typeof newPassword !== 'string' || newPassword.length < 8) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 8 characters long' });
+    }
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ success: false, message: 'Choose a new password different from your current password' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ success: false, message: 'Account not found' });
+    if (!await user.matchPassword(currentPassword)) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'Could not change password' });
+  }
+});
+
 // POST /api/auth/signup
 router.post('/signup', otpLimiter, async (req, res) => {
   try {
     const { name, email, password, age, gender, location, otp } = req.body;
     if (!name || !email || !password || !age || !gender || !location)
       return res.status(400).json({ success: false, message: 'Please fill in all fields' });
+    if (!['Male', 'Female'].includes(gender)) {
+      return res.status(400).json({ success: false, message: 'Select Male or Female for gender' });
+    }
 
     const normalizedEmail = String(email).trim().toLowerCase();
 
     const exists = await User.findOne({ email: normalizedEmail });
     if (exists)
-      return res.status(400).json({ success: false, message: 'Email already registered' });
+      return res.status(400).json({
+        success: false,
+        message: 'Another user already has an account with this email address. Please sign in or use a different email.',
+      });
 
     // Account creation requires a code verified through /verify-otp.
     const verifiedOtp = await Otp.findOne({
@@ -253,7 +320,12 @@ router.put('/profile', protect, async (req, res) => {
     const update = {};
     if (name) update.name = name;
     if (age) update.age = parseInt(age);
-    if (gender) update.gender = gender;
+    if (gender) {
+      if (!['Male', 'Female'].includes(gender)) {
+        return res.status(400).json({ success: false, message: 'Select Male or Female for gender' });
+      }
+      update.gender = gender;
+    }
     if (location) update.location = location;
     if (profilePhoto !== undefined) update.profilePhoto = profilePhoto;
 

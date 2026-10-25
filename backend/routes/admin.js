@@ -26,6 +26,24 @@ const getUploadPath = (filename) => {
 };
 
 const router = express.Router();
+const ownerEmail = (process.env.OWNER_EMAIL || 'healfund2006@gmail.com').trim().toLowerCase();
+
+const requireOwner = async (req, res, next) => {
+  try {
+    const owner = await User.findById(req.user.id).select('email role');
+    if (
+      !owner ||
+      owner.role !== 'admin' ||
+      owner.email.toLowerCase() !== ownerEmail ||
+      req.user.email?.toLowerCase() !== ownerEmail
+    ) {
+      return res.status(403).json({ success: false, message: 'Only the HealFund owner can manage profiles and admin accounts' });
+    }
+    next();
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 const serializeDocument = (doc) => ({
   id: doc.documentId,
@@ -373,20 +391,87 @@ router.delete('/financial-cases/:id', protect, requireRole('admin'), async (req,
 
 // ─── USERS ─────────────────────────────────────────────────────────────────────
 
+// POST /api/admin/users/patients — create a patient account for an assisted registration
+router.post('/users/patients', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
+  try {
+    const { name, email, password, age, gender, location } = req.body;
+    if (
+      typeof name !== 'string' || !name.trim() ||
+      typeof email !== 'string' || !email.trim() ||
+      typeof password !== 'string' || !password ||
+      age === undefined || !gender ||
+      typeof location !== 'string' || !location.trim()
+    ) {
+      return res.status(400).json({ success: false, message: 'Name, email, password, age, gender, and location are required' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return res.status(400).json({ success: false, message: 'Enter a valid email address' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Initial password must be at least 8 characters long' });
+    }
+    const parsedAge = Number(age);
+    if (!Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120) {
+      return res.status(400).json({ success: false, message: 'Age must be a whole number between 1 and 120' });
+    }
+    if (!['Male', 'Female'].includes(gender)) {
+      return res.status(400).json({ success: false, message: 'Select a valid gender' });
+    }
+    if (await User.exists({ email: normalizedEmail })) {
+      return res.status(409).json({ success: false, message: 'An account with this email already exists' });
+    }
+
+    const patient = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password,
+      age: parsedAge,
+      gender,
+      location: location.trim(),
+      role: 'patient',
+      createdByUserId: req.user.id,
+    });
+    res.status(201).json({
+      success: true,
+      patient: {
+        id: patient._id,
+        patientId: patient.patientId,
+        name: patient.name,
+        email: patient.email,
+        role: patient.role,
+      },
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
 // GET /api/admin/users
 router.get('/users', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
     const users = await User.find().select('-password').sort({ createdAt: -1 });
+    await Promise.all(users.map((user) => {
+      if (user.role !== 'admin') return null;
+      const owner = user.email.toLowerCase() === ownerEmail;
+      const expectedPrefix = owner ? 'HFO' : 'HFA';
+      if (new RegExp(`^${expectedPrefix}-\\d{4}$`).test(user.adminId || '')) return null;
+      return user.save();
+    }));
     const serialized = users.map((u) => ({
+      id: u._id,
       name: u.name,
       email: u.email,
       patientId: u.patientId || null,
+      adminId: u.adminId || null,
       hospitalId: u.hospitalId || null,
       hospitalName: u.hospitalName || null,
       gender: u.gender || null,
       location: u.location || null,
       status: u.status || null,
       role: u.role,
+      createdByCurrentUser: u.createdByUserId?.toString() === req.user.id,
       registered: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—',
     }));
     res.json({ success: true, users: serialized });
@@ -395,16 +480,124 @@ router.get('/users', protect, requireRole('admin', 'hospital_officer'), async (r
   }
 });
 
-// DELETE /api/admin/users/:email
-router.delete('/users/:email', protect, requireRole('admin'), async (req, res) => {
+// PUT /api/admin/users/:email — owner or creator staff can update patient profiles
+router.put('/users/:email', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
-    const user = await User.findOne({ email: req.params.email });
+    const email = req.params.email.trim().toLowerCase();
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (req.user.role === 'hospital_officer') {
+      if (user.role !== 'patient' || user.createdByUserId?.toString() !== req.user.id) {
+        return res.status(403).json({ success: false, message: 'Staff can only edit patient accounts they created' });
+      }
+    } else {
+      const owner = await User.findById(req.user.id).select('email role');
+      if (
+        !owner ||
+        owner.role !== 'admin' ||
+        owner.email.toLowerCase() !== ownerEmail ||
+        req.user.email?.toLowerCase() !== ownerEmail
+      ) {
+        return res.status(403).json({ success: false, message: 'Only the HealFund owner can manage profiles and admin accounts' });
+      }
+    }
+
+    const { name, location, gender, status } = req.body;
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ success: false, message: 'Name is required' });
+      }
+      user.name = name.trim();
+    }
+    if (location !== undefined) {
+      if (typeof location !== 'string' || !location.trim()) {
+        return res.status(400).json({ success: false, message: 'Location is required' });
+      }
+      user.location = location.trim();
+    }
+    if (gender !== undefined) {
+      if (!['Male', 'Female'].includes(gender)) {
+        return res.status(400).json({ success: false, message: 'Invalid gender' });
+      }
+      user.gender = gender;
+    }
+    if (status !== undefined) {
+      if (!['Verified', 'Pending', 'Suspended'].includes(status)) {
+        return res.status(400).json({ success: false, message: 'Invalid account status' });
+      }
+      user.status = status;
+    }
+
+    await user.save();
+    const { password: _, ...safeUser } = user.toObject();
+    res.json({ success: true, user: safeUser });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/admin/users/admins — create an admin account (owner only)
+router.post('/users/admins', protect, requireRole('admin'), requireOwner, async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name?.trim() || !email?.trim() || !password) {
+      return res.status(400).json({ success: false, message: 'Name, email, and password are required' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return res.status(400).json({ success: false, message: 'Enter a valid email address' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters long' });
+    }
+    if (await User.exists({ email: normalizedEmail })) {
+      return res.status(409).json({ success: false, message: 'An account with this email already exists' });
+    }
+
+    const user = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password,
+      role: 'admin',
+    });
+    res.status(201).json({ success: true, user: { id: user._id, adminId: user.adminId, name: user.name, email: user.email, role: user.role } });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// DELETE /api/admin/users/admins/:email — remove an admin account (owner only)
+router.delete('/users/admins/:email', protect, requireRole('admin'), requireOwner, async (req, res) => {
+  try {
+    const email = req.params.email.trim().toLowerCase();
+    if (email === ownerEmail) {
+      return res.status(409).json({ success: false, message: 'The owner account cannot be deleted' });
+    }
+    const user = await User.findOne({ email, role: 'admin' });
+    if (!user) return res.status(404).json({ success: false, message: 'Admin account not found' });
+    await user.deleteOne();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// DELETE /api/admin/users/:email
+router.delete('/users/:email', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
+  try {
+    const email = req.params.email.trim().toLowerCase();
+    const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     if (user._id.toString() === req.user.id) {
       return res.status(409).json({ success: false, message: 'You cannot delete the account currently in use' });
     }
     if (user.role !== 'patient') {
       return res.status(409).json({ success: false, message: 'Staff accounts cannot be deleted from the patient management screen' });
+    }
+    if (req.user.role === 'hospital_officer' && user.createdByUserId?.toString() !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Staff can only delete patient accounts they created' });
     }
     const [appointmentCount, documentCount, queueCount, caseCount] = await Promise.all([
       Appointment.countDocuments({ $or: [{ bookedByUserId: user._id.toString() }, { patientId: user.patientId }] }),

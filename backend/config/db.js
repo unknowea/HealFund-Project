@@ -5,7 +5,7 @@ const connectDB = async () => {
 
   if (!mongoUri) {
     console.error('❌ MongoDB connection error: Neither MONGO_URI nor MONGODB_URI is defined in environment variables.');
-    console.error('👉 If running on Render: Go to your Render Dashboard -> select your Web Service -> "Environment" -> add Key: MONGO_URI with your MongoDB Atlas connection string.');
+    console.error('👉 Set MONGO_URI in the backend environment or backend/.env.');
     process.exit(1);
   }
 

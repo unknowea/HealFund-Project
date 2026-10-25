@@ -7,9 +7,6 @@ const getApiBase = () => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL.replace(/\/+$/, '');
   }
-  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
-    return 'https://healfund-backend.onrender.com/api';
-  }
   return '/api';
 };
 
@@ -44,6 +41,12 @@ const handle = async (fetchPromise) => {
 // ─── AUTH ──────────────────────────────────────────────────────────────────────
 export const login = (email, password) =>
   handle(fetch(apiUrl('/auth/login'), { method: 'POST', headers: headers(), body: JSON.stringify({ email, password }) }));
+
+export const adminLogin = (email, password) =>
+  handle(fetch(apiUrl('/auth/admin-login'), { method: 'POST', headers: headers(), body: JSON.stringify({ email, password }) }));
+
+export const changePassword = (currentPassword, newPassword) =>
+  handle(fetch(apiUrl('/auth/change-password'), { method: 'PUT', headers: headers(), body: JSON.stringify({ currentPassword, newPassword }) }));
 
 export const sendOtp = (email, purpose = 'signup') =>
   handle(fetch(apiUrl('/auth/send-otp'), { method: 'POST', headers: headers(), body: JSON.stringify({ email, purpose }) }));

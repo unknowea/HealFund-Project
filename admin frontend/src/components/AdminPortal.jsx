@@ -58,6 +58,32 @@ const fmtDate = (iso) => {
   });
 };
 
+function GenderChoice({ value, onChange, name, required = false }) {
+  return (
+    <fieldset className="gender-choice-field">
+      <legend>Gender</legend>
+      <div className="gender-choice-options">
+        {[
+          { value: 'Male', icon: 'fa-mars' },
+          { value: 'Female', icon: 'fa-venus' },
+        ].map((option) => (
+          <label className="gender-choice-option" key={option.value}>
+            <input
+              type="radio"
+              name={name}
+              value={option.value}
+              checked={value === option.value}
+              onChange={() => onChange(option.value)}
+              required={required && option.value === 'Male'}
+            />
+            <span><i className={`fas ${option.icon}`} aria-hidden="true"></i>{option.value}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 // --- Admin Login Gate ---
 function AdminLogin({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
@@ -70,7 +96,7 @@ function AdminLogin({ onLoginSuccess }) {
     setError('');
     setLoading(true);
     try {
-      const res = await API('/api/auth/login', {
+      const res = await API('/api/auth/admin-login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
@@ -608,11 +634,18 @@ function DocumentsTab() {
 }
 
 // --- Users Tab ---
-function UsersTab({ canDeleteUsers, currentUserEmail }) {
+function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer }) {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [editingUser, setEditingUser] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', gender: 'Male', location: '', status: 'Verified' });
+  const [adminForm, setAdminForm] = useState({ name: '', email: '', password: '' });
+  const [patientForm, setPatientForm] = useState({ name: '', email: '', password: '', age: '', gender: 'Male', location: '' });
+  const [showAdminForm, setShowAdminForm] = useState(false);
+  const [showPatientForm, setShowPatientForm] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const load = async () => {
@@ -629,10 +662,13 @@ function UsersTab({ canDeleteUsers, currentUserEmail }) {
   };
   useEffect(() => { load(); }, []);
 
-  const handleDelete = async (email) => {
+  const handleDelete = async (user) => {
     setError('');
     try {
-      const res = await API(`/api/admin/users/${encodeURIComponent(email)}`, { method: 'DELETE' });
+      const endpoint = user.role === 'admin'
+        ? `/api/admin/users/admins/${encodeURIComponent(user.email)}`
+        : `/api/admin/users/${encodeURIComponent(user.email)}`;
+      const res = await API(endpoint, { method: 'DELETE' });
       const data = await res.json();
       if (!data.success) throw new Error(data.message || 'Could not delete user');
       setConfirmDelete(null);
@@ -642,15 +678,127 @@ function UsersTab({ canDeleteUsers, currentUserEmail }) {
     }
   };
 
+  const handleUpdateProfile = async (event) => {
+    event.preventDefault();
+    if (!editingUser) return;
+    setSaving(true);
+    setError('');
+    try {
+      const res = await API(`/api/admin/users/${encodeURIComponent(editingUser.email)}`, {
+        method: 'PUT',
+        body: JSON.stringify(editForm),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Could not update profile');
+      setEditingUser(null);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Could not update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateAdmin = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const res = await API('/api/admin/users/admins', {
+        method: 'POST',
+        body: JSON.stringify(adminForm),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Could not create admin account');
+      setAdminForm({ name: '', email: '', password: '' });
+      setShowAdminForm(false);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Could not create admin account');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreatePatient = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const res = await API('/api/admin/users/patients', {
+        method: 'POST',
+        body: JSON.stringify(patientForm),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || 'Could not create patient account');
+      setPatientForm({ name: '', email: '', password: '', age: '', gender: 'Male', location: '' });
+      setShowPatientForm(false);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Could not create patient account');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const filtered = users.filter((u) =>
     (u.name || '').toLowerCase().includes(search.toLowerCase()) ||
     (u.email || '').toLowerCase().includes(search.toLowerCase()) ||
-    (u.patientId || '').toLowerCase().includes(search.toLowerCase())
+    (u.patientId || u.adminId || '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div>
       {error && <div className="admin-alert admin-alert-error" role="alert">{error} <button type="button" onClick={load}>Retry</button></div>}
+      <div className="card admin-account-card" style={{ marginBottom: '18px', padding: '18px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Patient accounts</h3>
+            <p style={{ color: '#5e6f82', fontSize: '13px', margin: '4px 0 0' }}>Admins and staff can create accounts for patients they are helping.</p>
+          </div>
+          <button className={`btn admin-account-toggle ${showPatientForm ? 'admin-account-toggle-cancel' : 'btn-primary'}`} type="button" onClick={() => setShowPatientForm((open) => !open)}>
+            <i className={`fas ${showPatientForm ? 'fa-times' : 'fa-user-plus'}`}></i> {showPatientForm ? 'Cancel' : 'Add Patient'}
+          </button>
+        </div>
+        {showPatientForm && (
+          <form className="admin-account-form admin-patient-form" onSubmit={handleCreatePatient}>
+            <label className="admin-form-field">Full name<input required value={patientForm.name} onChange={(event) => setPatientForm({ ...patientForm, name: event.target.value })} /></label>
+            <label className="admin-form-field">Email<input required type="email" value={patientForm.email} onChange={(event) => setPatientForm({ ...patientForm, email: event.target.value })} /></label>
+            <label className="admin-form-field">Initial password<input required type="password" minLength={8} autoComplete="new-password" value={patientForm.password} onChange={(event) => setPatientForm({ ...patientForm, password: event.target.value })} /></label>
+            <label className="admin-form-field">Age<input required type="number" min="1" max="120" step="1" value={patientForm.age} onChange={(event) => setPatientForm({ ...patientForm, age: event.target.value })} /></label>
+            <GenderChoice
+              name="new-patient-gender"
+              value={patientForm.gender}
+              onChange={(gender) => setPatientForm({ ...patientForm, gender })}
+              required
+            />
+            <label className="admin-form-field">Location<input required value={patientForm.location} onChange={(event) => setPatientForm({ ...patientForm, location: event.target.value })} /></label>
+            <p className="admin-form-hint">Give the initial password to the patient privately and ask them to change it after signing in.</p>
+            <button className="btn btn-success admin-patient-submit" type="submit" disabled={saving}><i className="fas fa-user-plus"></i>{saving ? 'Creating…' : 'Create Patient'}</button>
+          </form>
+        )}
+      </div>
+      {isOwner && (
+        <div className="card admin-account-card" style={{ marginBottom: '18px', padding: '18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div>
+              <h3 style={{ margin: 0 }}>Admin accounts</h3>
+              <p style={{ color: '#5e6f82', fontSize: '13px', margin: '4px 0 0' }}>Owner-only controls for creating and removing administrators.</p>
+            </div>
+            <button className={`btn admin-account-toggle ${showAdminForm ? 'admin-account-toggle-cancel' : 'btn-primary'}`} type="button" onClick={() => setShowAdminForm((open) => !open)}>
+              <i className="fas fa-user-plus"></i> {showAdminForm ? 'Cancel' : 'Add Admin'}
+            </button>
+          </div>
+          {showAdminForm && (
+            <form className="admin-account-form" onSubmit={handleCreateAdmin}>
+              <label className="admin-form-field">Name<input required value={adminForm.name} onChange={(event) => setAdminForm({ ...adminForm, name: event.target.value })} /></label>
+              <label className="admin-form-field">Email<input required type="email" value={adminForm.email} onChange={(event) => setAdminForm({ ...adminForm, email: event.target.value })} /></label>
+              <label className="admin-form-field">Temporary password<input required type="password" minLength={8} value={adminForm.password} onChange={(event) => setAdminForm({ ...adminForm, password: event.target.value })} /></label>
+              <button className="btn btn-success" type="submit" disabled={saving}><i className="fas fa-user-plus"></i>{saving ? 'Creating…' : 'Create Admin'}</button>
+            </form>
+          )}
+        </div>
+      )}
       <div className="admin-toolbar">
         <div className="admin-search">
           <i className="fas fa-search"></i>
@@ -665,10 +813,10 @@ function UsersTab({ canDeleteUsers, currentUserEmail }) {
         <div className="card">
           <table className="admin-table">
             <thead>
-              <tr><th>Name</th><th>Email</th><th>Patient ID</th><th>Gender</th><th>Location</th><th>Status</th><th>Registered</th>{canDeleteUsers && <th>Actions</th>}</tr>
+              <tr><th>Name</th><th>Email</th><th>ID</th><th>Gender</th><th>Location</th><th>Role / Status</th><th>Registered</th>{(canDeleteUsers || isOwner) && <th>Actions</th>}</tr>
             </thead>
             <tbody>
-              {filtered.length === 0 && <tr><td colSpan={canDeleteUsers ? 8 : 7} style={{ textAlign: 'center', color: '#7a8a9e' }}>No users found</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={canDeleteUsers || isOwner || isHospitalOfficer ? 8 : 7} style={{ textAlign: 'center', color: '#7a8a9e' }}>No users found</td></tr>}
               {filtered.map((u, i) => (
                 <tr key={i}>
                   <td>
@@ -678,21 +826,34 @@ function UsersTab({ canDeleteUsers, currentUserEmail }) {
                     </div>
                   </td>
                   <td style={{ fontSize: '13px', color: '#4a5a6e' }}>{u.email}</td>
-                  <td><code className="admin-code">{u.patientId || u.hospitalId || '—'}</code></td>
+                  <td><code className="admin-code">{u.adminId || u.patientId || u.hospitalId || '—'}</code></td>
                   <td>{u.gender || '—'}</td>
                   <td style={{ fontSize: '13px' }}>{u.location || u.hospitalName || '—'}</td>
                   <td>
                     <span className={`status-badge ${u.status === 'Verified' || u.role ? 'status-verified' : 'status-pending'}`}>
-                      {u.role || u.status || 'Patient'}
+                      {u.adminId?.startsWith('HFO-') ? 'Owner' : u.role || u.status || 'Patient'}
                     </span>
                   </td>
                   <td style={{ fontSize: '13px', color: '#7a8a9e' }}>{u.registered || '—'}</td>
-                  {canDeleteUsers && <td>
-                    {u.role === 'patient' && u.email !== currentUserEmail && (
-                    <button className="admin-btn-danger" title="Delete user" onClick={() => setConfirmDelete(u.email)}>
-                      <i className="fas fa-trash"></i>
-                    </button>
-                    )}
+                  {(canDeleteUsers || isOwner || isHospitalOfficer) && <td>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {(isOwner || (isHospitalOfficer && u.role === 'patient' && u.createdByCurrentUser)) && (
+                        <button className="admin-btn admin-btn-edit" type="button" aria-label={`Edit ${u.name || u.email} profile`} title="Edit profile" onClick={() => {
+                          setEditingUser(u);
+                          setEditForm({ name: u.name || '', gender: u.gender === 'Female' ? 'Female' : 'Male', location: u.location || '', status: u.status || 'Verified' });
+                        }}>
+                          <i className="fas fa-edit"></i>
+                        </button>
+                      )}
+                      {u.email.toLowerCase() !== (currentUserEmail || '').toLowerCase() &&
+                        ((u.role === 'patient' && canDeleteUsers) ||
+                          (u.role === 'patient' && isHospitalOfficer && u.createdByCurrentUser) ||
+                          (u.role === 'admin' && isOwner)) && (
+                        <button className="admin-btn-danger" type="button" aria-label={`Delete ${u.role === 'admin' ? 'admin' : 'user'} ${u.email}`} title={u.role === 'admin' ? 'Delete admin' : 'Delete user'} onClick={() => setConfirmDelete(u)}>
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      )}
+                    </div>
                   </td>}
                 </tr>
               ))}
@@ -704,13 +865,41 @@ function UsersTab({ canDeleteUsers, currentUserEmail }) {
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: '400px', textAlign: 'center' }}>
             <i className="fas fa-exclamation-triangle" style={{ fontSize: '40px', color: '#da121a', marginBottom: '16px' }}></i>
-            <h3 style={{ marginBottom: '8px' }}>Delete User?</h3>
-            <p style={{ color: '#5e6f82', marginBottom: '24px' }}>Permanently remove <strong>{confirmDelete}</strong>. Cannot be undone.</p>
+            <h3 style={{ marginBottom: '8px' }}>Delete {confirmDelete.role === 'admin' ? 'Admin' : 'User'}?</h3>
+            <p style={{ color: '#5e6f82', marginBottom: '24px' }}>Permanently remove <strong>{confirmDelete.email}</strong>. Cannot be undone.</p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
               <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Cancel</button>
               <button className="btn" style={{ background: '#da121a', color: '#fff' }} onClick={() => handleDelete(confirmDelete)}>Delete</button>
             </div>
           </div>
+        </div>
+      )}
+      {editingUser && (
+        <div className="modal-overlay">
+          <form className="modal-box profile-edit-form" onSubmit={handleUpdateProfile}>
+            <div className="profile-edit-heading">
+              <div className="profile-edit-icon"><i className="fas fa-user-edit"></i></div>
+              <h3>Edit profile</h3>
+              <p>{editingUser.email} · {editingUser.role}</p>
+            </div>
+            <label className="profile-edit-field">Name<input required value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} /></label>
+            <GenderChoice
+              name="edit-patient-gender"
+              value={editForm.gender}
+              onChange={(gender) => setEditForm({ ...editForm, gender })}
+              required
+            />
+            <label className="profile-edit-field">Location<input required value={editForm.location} onChange={(event) => setEditForm({ ...editForm, location: event.target.value })} /></label>
+            <label className="profile-edit-field">Status
+              <select value={editForm.status} onChange={(event) => setEditForm({ ...editForm, status: event.target.value })}>
+                <option>Verified</option><option>Pending</option><option>Suspended</option>
+              </select>
+            </label>
+            <div className="profile-edit-actions">
+              <button className="btn btn-secondary" type="button" onClick={() => setEditingUser(null)}>Cancel</button>
+              <button className="btn btn-primary" type="submit" disabled={saving}><i className="fas fa-save"></i>{saving ? 'Saving…' : 'Save profile'}</button>
+            </div>
+          </form>
         </div>
       )}
     </div>
@@ -2114,7 +2303,12 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
         {activeTab === 'appointments' && <AppointmentsTab />}
         {activeTab === 'queue'        && <QueueTab />}
         {activeTab === 'documents'    && <DocumentsTab />}
-        {activeTab === 'users'        && <UsersTab canDeleteUsers={adminUser.role === 'admin'} currentUserEmail={adminUser.email} />}
+        {activeTab === 'users'        && <UsersTab
+          canDeleteUsers={adminUser.role === 'admin'}
+          currentUserEmail={adminUser.email}
+          isOwner={adminUser.role === 'admin' && adminUser.email?.toLowerCase() === 'healfund2006@gmail.com'}
+          isHospitalOfficer={adminUser.role === 'hospital_officer'}
+        />}
         {activeTab === 'financial'    && <FinancialTab canDeleteCases={adminUser.role === 'admin'} />}
         {activeTab === 'hospitals'    && <HospitalsTab canVerifyHospitals={adminUser.role === 'admin'} />}
         {activeTab === 'messages'     && <MessagesTab />}

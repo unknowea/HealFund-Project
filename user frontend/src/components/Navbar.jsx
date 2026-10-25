@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { changePassword } from '../api.js';
 
 export default function Navbar({
   activeModule,
@@ -10,13 +11,56 @@ export default function Navbar({
   onLogout,
 }) {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   const handleProfileAction = (module) => {
     setActiveModule(module);
     setIsProfileMenuOpen(false);
   };
 
+  const closePasswordModal = () => {
+    setIsPasswordModalOpen(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError('');
+    setPasswordSuccess('');
+  };
+
+  const handleChangePassword = async (event) => {
+    event.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+    if (newPassword !== confirmPassword) {
+      setPasswordError(currentLang === 'am' ? 'አዲሶቹ የይለፍ ቃሎች አይዛመዱም።' : 'The new passwords do not match.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordError(currentLang === 'am' ? 'የይለፍ ቃሉ ቢያንስ 8 ቁምፊዎች መሆን አለበት።' : 'Password must be at least 8 characters long.');
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      const result = await changePassword(currentPassword, newPassword);
+      setPasswordSuccess(result.message || 'Password changed successfully.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      setPasswordError(error.message || 'Could not change password.');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
   return (
+    <>
     <nav className="navbar">
       <div className="logo" onClick={() => setActiveModule('home')} style={{ cursor: 'pointer' }}>
         <i className="fas fa-heartbeat"></i>
@@ -111,6 +155,15 @@ export default function Navbar({
                   </button>
                 ))}
                 <div style={{ borderTop: '1px solid #e2eaf3' }}>
+                  <button type="button" onClick={() => {
+                    setIsProfileMenuOpen(false);
+                    setIsPasswordModalOpen(true);
+                  }}
+                    style={{ width: '100%', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#0f3b5e', textAlign: 'left' }}
+                  >
+                    <i className="fas fa-key" style={{ color: '#078930', width: '16px' }}></i>
+                    <span>{currentLang === 'am' ? 'የይለፍ ቃል ቀይር' : 'Change password'}</span>
+                  </button>
                   <button type="button" onClick={() => { onLogout(); setIsProfileMenuOpen(false); }}
                     style={{ width: '100%', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#da121a', textAlign: 'left' }}
                     onMouseEnter={(e) => e.currentTarget.style.background = '#fff5f5'}
@@ -130,5 +183,51 @@ export default function Navbar({
         )}
       </div>
     </nav>
+    {isPasswordModalOpen && (
+      <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !passwordSaving) closePasswordModal();
+      }}>
+        <form className="modal-box password-change-dialog" onSubmit={handleChangePassword}>
+          <div className="password-dialog-heading">
+            <div className="password-dialog-icon"><i className="fas fa-key"></i></div>
+            <h2>{currentLang === 'am' ? 'የይለፍ ቃል ቀይር' : 'Change password'}</h2>
+            <p>{currentLang === 'am' ? 'መለያዎን ለመጠበቅ አሁኑን የይለፍ ቃልዎን ያረጋግጡ።' : 'Verify your current password to secure your account.'}</p>
+          </div>
+          {passwordError && <div className="password-dialog-alert password-dialog-error" role="alert">{passwordError}</div>}
+          {passwordSuccess ? (
+            <>
+              <div className="password-dialog-alert password-dialog-success" role="status">{passwordSuccess}</div>
+              <button className="btn btn-primary password-dialog-submit" type="button" onClick={closePasswordModal}>
+                {currentLang === 'am' ? 'ተጠናቋል' : 'Done'}
+              </button>
+            </>
+          ) : (
+            <>
+              <label className="form-group password-dialog-field">
+                {currentLang === 'am' ? 'አሁኑ የይለፍ ቃል' : 'Current password'}
+                <input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required />
+              </label>
+              <label className="form-group password-dialog-field">
+                {currentLang === 'am' ? 'አዲስ የይለፍ ቃል' : 'New password'}
+                <input type="password" autoComplete="new-password" minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required />
+              </label>
+              <label className="form-group password-dialog-field">
+                {currentLang === 'am' ? 'አዲሱን የይለፍ ቃል ያረጋግጡ' : 'Confirm new password'}
+                <input type="password" autoComplete="new-password" minLength={8} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />
+              </label>
+              <div className="password-dialog-actions">
+                <button className="btn btn-outline" type="button" onClick={closePasswordModal} disabled={passwordSaving}>
+                  {currentLang === 'am' ? 'ተወው' : 'Cancel'}
+                </button>
+                <button className="btn btn-primary password-dialog-submit" type="submit" disabled={passwordSaving}>
+                  <i className="fas fa-lock"></i>{passwordSaving ? (currentLang === 'am' ? 'በመቀየር ላይ...' : 'Updating...') : (currentLang === 'am' ? 'የይለፍ ቃል አዘምን' : 'Update password')}
+                </button>
+              </div>
+            </>
+          )}
+        </form>
+      </div>
+    )}
+    </>
   );
 }

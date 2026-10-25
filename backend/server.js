@@ -30,7 +30,7 @@ const allowedOrigins = [
 
 const isAllowedOrigin = (origin) => {
   if (!origin) return true;
-  return allowedOrigins.includes(origin) || /^https:\/\/healfund[a-z0-9-]*\.onrender\.com$/i.test(origin);
+  return allowedOrigins.includes(origin);
 };
 
 // ─── CORS ──────────────────────────────────────────────────────────────────────

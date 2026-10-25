@@ -2,6 +2,31 @@ import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { getAppointments, getAppointmentFileBlob, createAppointment, uploadFile, uploadAdditionalAppointmentDocs, sendMessage, getProfile, updateProfile, getPublicStats } from '../api.js';
 
+function GenderChoice({ value, onChange, name, isAm = false }) {
+  return (
+    <fieldset className="gender-choice-field">
+      <legend>{isAm ? 'ጾታ' : 'Gender'}</legend>
+      <div className="gender-choice-options">
+        {[
+          { value: 'Male', label: isAm ? 'ወንድ' : 'Male', icon: 'fa-mars' },
+          { value: 'Female', label: isAm ? 'ሴት' : 'Female', icon: 'fa-venus' },
+        ].map((option) => (
+          <label className="gender-choice-option" key={option.value}>
+            <input
+              type="radio"
+              name={name}
+              value={option.value}
+              checked={value === option.value}
+              onChange={() => onChange(option.value)}
+            />
+            <span><i className={`fas ${option.icon}`} aria-hidden="true"></i>{option.label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 export default function PatientPortal({
   currentLang, currentUser, onOpenAuth,
   activeTab: propActiveTab, setActiveTab: propSetActiveTab, setActiveModule,
@@ -161,7 +186,7 @@ export default function PatientPortal({
   const openProfileEdit = () => {
     setEditName(defaultUser.name || '');
     setEditAge(defaultUser.age || '');
-    setEditGender(defaultUser.gender || '');
+    setEditGender(defaultUser.gender === 'Female' ? 'Female' : 'Male');
     setEditLocation(defaultUser.location || '');
     setEditPhoto(defaultUser.profilePhoto || '');
     setProfileMsg('');
@@ -761,14 +786,7 @@ export default function PatientPortal({
                         onChange={(e) => setBookPatientAge(e.target.value)}
                       />
                     </div>
-                    <div className="form-group">
-                      <label>{isAm ? 'ጾታ' : 'Gender'}</label>
-                      <select value={bookPatientGender} onChange={(e) => setBookPatientGender(e.target.value)}>
-                        <option value="">Select Gender</option>
-                        <option value="Male">{isAm ? 'ወንድ' : 'Male'}</option>
-                        <option value="Female">{isAm ? 'ሴት' : 'Female'}</option>
-                      </select>
-                    </div>
+                    <GenderChoice name="appointment-patient-gender" value={bookPatientGender} onChange={setBookPatientGender} isAm={isAm} />
                   </div>
                 </div>
               )}
@@ -1056,13 +1074,7 @@ export default function PatientPortal({
                   <label>{isAm ? 'ዕድሜ' : 'Age'}</label>
                   <input type="number" value={editAge} onChange={(e) => setEditAge(e.target.value)} min="1" max="120" />
                 </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label>{isAm ? 'ጾታ' : 'Gender'}</label>
-                  <select value={editGender} onChange={(e) => setEditGender(e.target.value)}>
-                    <option value="Male">{isAm ? 'ወንድ' : 'Male'}</option>
-                    <option value="Female">{isAm ? 'ሴት' : 'Female'}</option>
-                  </select>
-                </div>
+                <GenderChoice name="profile-gender" value={editGender} onChange={setEditGender} isAm={isAm} />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label>{isAm ? 'ቦታ' : 'Location'}</label>

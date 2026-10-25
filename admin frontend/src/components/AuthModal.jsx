@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { login } from '../api.js';
+import { adminLogin, login } from '../api.js';
 
 export default function AuthModal({ isOpen, onClose, onLoginSuccess, currentLang, adminMode = false }) {
   const [email, setEmail] = useState('');
@@ -16,7 +16,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, currentLang
     setError('');
     setLoading(true);
     try {
-      const data = await login(email, password);
+      const data = adminMode ? await adminLogin(email, password) : await login(email, password);
       // Admin portal: only allow hospital_officer or admin roles
       if (adminMode && data.user.role === 'patient') {
         setError('Access denied. Staff credentials required.');

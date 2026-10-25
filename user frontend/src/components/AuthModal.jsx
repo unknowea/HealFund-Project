@@ -43,6 +43,32 @@ const validatePassword = (pwd) => {
   return { hasLetter, hasNumber, hasSpecial, isLong, valid: hasLetter && hasNumber && hasSpecial && isLong };
 };
 
+function GenderChoice({ value, onChange, name, required = false, isAm = false }) {
+  return (
+    <fieldset className="gender-choice-field">
+      <legend>{isAm ? 'ጾታ' : 'Gender'}</legend>
+      <div className="gender-choice-options">
+        {[
+          { value: 'Male', label: isAm ? 'ወንድ' : 'Male', icon: 'fa-mars' },
+          { value: 'Female', label: isAm ? 'ሴት' : 'Female', icon: 'fa-venus' },
+        ].map((option) => (
+          <label className="gender-choice-option" key={option.value}>
+            <input
+              type="radio"
+              name={name}
+              value={option.value}
+              checked={value === option.value}
+              onChange={() => onChange(option.value)}
+              required={required && option.value === 'Male'}
+            />
+            <span><i className={`fas ${option.icon}`} aria-hidden="true"></i>{option.label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 // Reusable Password Input with Show/Hide toggle
 const PasswordInput = ({ value, onChange, show, setShow, placeholder, id }) => (
   <div style={{ position: 'relative' }}>
@@ -513,16 +539,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, currentLang
                 <label>{isAm ? 'ዕድሜ *' : 'Age *'}</label>
                 <input type="number" value={age} onChange={(e) => setAge(e.target.value)} min="1" max="120" placeholder="e.g. 30" required />
               </div>
-              <div className="form-group">
-                <label>{isAm ? 'ጾታ *' : 'Gender *'}</label>
-                <select value={gender} onChange={(e) => setGender(e.target.value)} required>
-                  <option value="" disabled>
-                    {isAm ? 'ይምረጡ' : 'Select Gender'}
-                  </option>
-                  <option value="Male">{isAm ? 'ወንድ' : 'Male'}</option>
-                  <option value="Female">{isAm ? 'ሴት' : 'Female'}</option>
-                </select>
-              </div>
+              <GenderChoice name="signup-gender" value={gender} onChange={setGender} required isAm={isAm} />
             </div>
 
             <div className="form-group">

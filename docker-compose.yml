@@ -24,6 +24,10 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production}
       CHAPA_SECRET_KEY: ${CHAPA_SECRET_KEY:-}
       BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-}
+      EMAIL_SERVICE: ${EMAIL_SERVICE:-}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASS: ${EMAIL_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
       USER_FRONTEND_URL: http://localhost:3000
       ADMIN_FRONTEND_URL: http://localhost:3001
     ports:
