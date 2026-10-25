@@ -78,7 +78,7 @@ app.get('/api/health', (req, res) => {
 app.get('/api/public/stats', async (req, res) => {
   try {
     const [totalUsers, totalHospitals, totalFinancialCases] = await Promise.all([
-      (await import('./models/User.js')).default.countDocuments({ role: 'patient' }),
+      (await import('./models/User.js')).default.countDocuments({ role: 'patient', deletedAt: null }),
       (await import('./models/Hospital.js')).default.countDocuments({ hospitalId: 'HOSP-001' }),
       (await import('./models/FinancialCase.js')).default.countDocuments({ status: 'Active' }),
     ]);

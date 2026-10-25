@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema(
     hospitalName: { type: String },
     createdByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
     profilePhoto: { type: String, default: '' },
+    deletedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
@@ -38,8 +39,18 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
 // Auto-generate patientId for patients
 userSchema.pre('save', async function (next) {
   if (!this.patientId && this.role === 'patient') {
-    const count = await mongoose.model('User').countDocuments({ role: 'patient' });
-    this.patientId = `HF-${String(count + 1).padStart(4, '0')}`;
+    const linkedModels = ['Appointment', 'PatientDocument', 'Queue', 'FinancialCase']
+      .map((modelName) => mongoose.models[modelName])
+      .filter(Boolean);
+    const patientIdLists = await Promise.all([
+      mongoose.model('User').distinct('patientId', { patientId: /^HF-\d+$/ }),
+      ...linkedModels.map((model) => model.distinct('patientId', { patientId: /^HF-\d+$/ })),
+    ]);
+    const highestPatientNumber = patientIdLists.flat().reduce((highest, patientId) => {
+      const match = /^HF-(\d+)$/.exec(patientId || '');
+      return match ? Math.max(highest, Number(match[1])) : highest;
+    }, 0);
+    this.patientId = `HF-${String(highestPatientNumber + 1).padStart(4, '0')}`;
   }
   if (this.role === 'admin') {
     const ownerEmail = (process.env.OWNER_EMAIL || 'healfund2006@gmail.com').trim().toLowerCase();

@@ -29,6 +29,9 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem('healfund_token');
     localStorage.removeItem('healfund_user');
+    localStorage.removeItem('healfund_remember_me');
+    sessionStorage.removeItem('healfund_token');
+    sessionStorage.removeItem('healfund_user');
     setCurrentUser(null);
   };
 

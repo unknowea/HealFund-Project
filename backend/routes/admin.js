@@ -69,7 +69,7 @@ router.get('/stats', protect, requireRole('admin', 'hospital_officer'), async (r
       financialCases, totalDocuments, pendingDocuments,
       verifiedDocuments, rejectedDocuments,
     ] = await Promise.all([
-      User.countDocuments({ role: 'patient' }),
+      User.countDocuments({ role: 'patient', deletedAt: null }),
       Appointment.countDocuments(),
       Appointment.countDocuments({ status: 'Pending Review' }),
       Hospital.countDocuments({ hospitalId: 'HOSP-001' }),
@@ -451,7 +451,7 @@ router.post('/users/patients', protect, requireRole('admin', 'hospital_officer')
 // GET /api/admin/users
 router.get('/users', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
-    const users = await User.find().select('-password').sort({ createdAt: -1 });
+    const users = await User.find({ deletedAt: null }).select('-password').sort({ createdAt: -1 });
     await Promise.all(users.map((user) => {
       if (user.role !== 'admin') return null;
       const owner = user.email.toLowerCase() === ownerEmail;
@@ -615,15 +615,6 @@ router.delete('/users/:email', protect, requireRole('admin', 'hospital_officer')
     }
     if (req.user.role === 'hospital_officer' && user.createdByUserId?.toString() !== req.user.id) {
       return res.status(403).json({ success: false, message: 'Staff can only delete patient accounts they created' });
-    }
-    const [appointmentCount, documentCount, queueCount, caseCount] = await Promise.all([
-      Appointment.countDocuments({ $or: [{ bookedByUserId: user._id.toString() }, { patientId: user.patientId }] }),
-      PatientDocument.countDocuments({ patientId: user.patientId }),
-      Queue.countDocuments({ patientId: user.patientId }),
-      FinancialCase.countDocuments({ patientId: user.patientId }),
-    ]);
-    if (appointmentCount || documentCount || queueCount || caseCount) {
-      return res.status(409).json({ success: false, message: 'This patient has linked medical or financial records and cannot be deleted' });
     }
     await user.deleteOne();
     res.json({ success: true });

@@ -258,6 +258,7 @@ function DocumentsTab() {
   const [department, setDepartment] = useState('Cardiology Clinic (Room 104)');
   const [urgency, setUrgency] = useState('Medium');
   const [saving, setSaving] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState(null);
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
 
@@ -323,16 +324,20 @@ function DocumentsTab() {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (doc) => {
+    if (!window.confirm(`Permanently delete "${doc.originalName}" for ${doc.patientName}? The uploaded file and document record will be removed.`)) return;
     setError('');
+    setDeletingDocumentId(doc.id);
     try {
-      const res = await API(`/api/admin/documents/${id}`, { method: 'DELETE' });
+      const res = await API(`/api/admin/documents/${encodeURIComponent(doc.id)}`, { method: 'DELETE' });
       const data = await res.json();
       if (!data.success) throw new Error(data.message || 'Could not delete document');
-      setSelected(null);
+      if (selected?.id === doc.id) setSelected(null);
       await load(filter);
     } catch (err) {
       setError(err.message || 'Could not delete document');
+    } finally {
+      setDeletingDocumentId(null);
     }
   };
 
@@ -351,9 +356,8 @@ function DocumentsTab() {
   const filtered = docs.filter((d) => {
     const q = search.toLowerCase();
     return (
-      d.patientName.toLowerCase().includes(q) ||
-      d.patientId.toLowerCase().includes(q) ||
-      d.originalName.toLowerCase().includes(q)
+      [d.patientName, d.patientId, d.originalName]
+        .some((value) => String(value || '').toLowerCase().includes(q))
     );
   });
 
@@ -475,9 +479,10 @@ function DocumentsTab() {
                         onClick={(e) => { e.stopPropagation(); openDocumentFile(doc.id); }}>
                         <i className="fas fa-eye"></i>
                       </button>
-                      <button className="admin-btn-danger" title="Delete"
-                        onClick={() => handleDelete(doc.id)}>
-                        <i className="fas fa-trash"></i>
+                      <button type="button" className="admin-btn-danger" title={deletingDocumentId === doc.id ? 'Deleting…' : 'Delete'}
+                        disabled={deletingDocumentId === doc.id}
+                        onClick={() => handleDelete(doc)}>
+                        <i className={`fas ${deletingDocumentId === doc.id ? 'fa-spinner fa-spin' : 'fa-trash'}`}></i>
                       </button>
                     </div>
                   </td>
@@ -636,6 +641,7 @@ function DocumentsTab() {
 
 // --- Users Tab ---
 function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer }) {
+  const showActions = canDeleteUsers || isOwner || isHospitalOfficer;
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -822,10 +828,10 @@ function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer
         <div className="card">
           <table className="admin-table">
             <thead>
-              <tr><th>Name</th><th>Email</th><th>ID</th><th>Gender</th><th>Location</th><th>Role / Status</th><th>Registered</th>{(canDeleteUsers || isOwner) && <th>Actions</th>}</tr>
+              <tr><th>Name</th><th>Email</th><th>ID</th><th>Gender</th><th>Location</th><th>Role / Status</th><th>Registered</th>{showActions && <th>Actions</th>}</tr>
             </thead>
             <tbody>
-              {filtered.length === 0 && <tr><td colSpan={canDeleteUsers || isOwner || isHospitalOfficer ? 8 : 7} style={{ textAlign: 'center', color: '#7a8a9e' }}>No users found</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={showActions ? 8 : 7} style={{ textAlign: 'center', color: '#7a8a9e' }}>No users found</td></tr>}
               {filtered.map((u, i) => (
                 <tr key={i}>
                   <td>
@@ -844,7 +850,7 @@ function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer
                     </span>
                   </td>
                   <td style={{ fontSize: '13px', color: '#7a8a9e' }}>{u.registered || '—'}</td>
-                  {(canDeleteUsers || isOwner || isHospitalOfficer) && <td>
+                  {showActions && <td>
                     <div style={{ display: 'flex', gap: '6px' }}>
                       {(isOwner || (isHospitalOfficer && u.role === 'patient' && u.createdByCurrentUser)) && (
                         <button className="admin-btn admin-btn-edit" type="button" aria-label={`Edit ${u.name || u.email} profile`} title="Edit profile" onClick={() => {
@@ -874,8 +880,13 @@ function UsersTab({ canDeleteUsers, currentUserEmail, isOwner, isHospitalOfficer
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: '400px', textAlign: 'center' }}>
             <i className="fas fa-exclamation-triangle" style={{ fontSize: '40px', color: '#da121a', marginBottom: '16px' }}></i>
-            <h3 style={{ marginBottom: '8px' }}>Delete {confirmDelete.role === 'admin' ? 'Admin' : 'User'}?</h3>
-            <p style={{ color: '#5e6f82', marginBottom: '24px' }}>Permanently remove <strong>{confirmDelete.email}</strong>. Cannot be undone.</p>
+            <h3 style={{ marginBottom: '8px' }}>Delete {confirmDelete.role === 'admin' ? 'Admin' : confirmDelete.role === 'hospital_officer' ? 'Staff' : 'Patient'} account?</h3>
+            <p style={{ color: '#5e6f82', marginBottom: '24px' }}>
+              Remove the login account for <strong>{confirmDelete.email}</strong>.{' '}
+              {confirmDelete.role === 'patient'
+                ? 'Existing appointments, medical documents, queue entries, and financial records will be retained.'
+                : 'This account removal cannot be undone.'}
+            </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
               <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Cancel</button>
               <button className="btn" style={{ background: '#da121a', color: '#fff' }} onClick={() => handleDelete(confirmDelete)}>Delete</button>
@@ -1847,11 +1858,11 @@ function QueueTab() {
     try {
       const res = await API(`/api/admin/queue/${token}`, { method: 'DELETE' });
       const data = await res.json();
-      if (data.success) {
-        setQueue(data.queue || []);
-        setToast(`${patientName || token} removed from queue. Their appointment has been cancelled.`);
-        setTimeout(() => setToast(''), 5000);
-      }
+      if (!res.ok || !data.success) throw new Error(data.message || 'Could not remove patient from queue');
+      if (!Array.isArray(data.queue)) throw new Error('Queue was removed, but the server returned an invalid queue list. Refresh the page.');
+      setQueue(data.queue);
+      setToast(`${patientName || token} removed from queue. Their appointment has been cancelled.`);
+      setTimeout(() => setToast(''), 5000);
     } catch (err) {
       setToast(`Queue removal failed: ${err.message}`);
     }
@@ -2207,8 +2218,15 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
           const u = JSON.parse(savedUser);
           if (u.role === 'admin' || u.role === 'hospital_officer') {
             setAdminUser(u);
+          } else {
+            setAdminUser(null);
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error('Failed to restore admin session', e);
+          setAdminUser(null);
+        }
+      } else {
+        setAdminUser(null);
       }
     }
   }, [currentUser]);
@@ -2267,6 +2285,9 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
   const handleLogout = () => {
     localStorage.removeItem('healfund_token');
     localStorage.removeItem('healfund_user');
+    localStorage.removeItem('healfund_remember_me');
+    sessionStorage.removeItem('healfund_token');
+    sessionStorage.removeItem('healfund_user');
     setAdminUser(null);
     if (onLogout) onLogout();
   };

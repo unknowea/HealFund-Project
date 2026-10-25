@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
 
-export const protect = (req, res, next) => {
+export const protect = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
@@ -8,12 +9,29 @@ export const protect = (req, res, next) => {
     return res.status(401).json({ success: false, message: 'Not authorised, no token' });
   }
 
+  let decoded;
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // { id, email, role }
-    next();
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
     return res.status(401).json({ success: false, message: 'Token invalid or expired' });
+  }
+  if (!decoded || typeof decoded !== 'object' || !decoded.id) {
+    return res.status(401).json({ success: false, message: 'Token invalid or expired' });
+  }
+
+  try {
+    const user = await User.findById(decoded.id).select('email role status deletedAt');
+    if (!user || user.deletedAt) {
+      return res.status(401).json({ success: false, message: 'This account is no longer available. Please sign in again.' });
+    }
+    if (user.status === 'Suspended') {
+      return res.status(403).json({ success: false, message: 'This account has been suspended. Contact support.' });
+    }
+    req.user = { id: user._id.toString(), email: user.email, role: user.role };
+    return next();
+  } catch (err) {
+    console.error('Authentication check failed:', err);
+    return res.status(500).json({ success: false, message: 'Could not verify the account session' });
   }
 };
 

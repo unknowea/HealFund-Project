@@ -35,7 +35,7 @@ router.post('/send-otp', otpLimiter, async (req, res) => {
     // If signup, check if email is already registered
     if (purpose === 'signup') {
       const existingUser = await User.findOne({ email: normalizedEmail });
-      if (existingUser) {
+      if (existingUser && !existingUser.deletedAt) {
         return res.status(400).json({
           success: false,
           message: 'Another user already has an account with this email address. Please sign in or use a different email.',
@@ -171,8 +171,12 @@ router.post('/login', authLimiter, async (req, res) => {
 
     const normalizedEmail = String(email).trim().toLowerCase();
     const user = await User.findOne({ email: normalizedEmail });
-    if (!user || !await user.matchPassword(password))
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    if (!user)
+      return res.status(401).json({ success: false, message: 'Email and password are incorrect' });
+    if (!await user.matchPassword(password))
+      return res.status(401).json({ success: false, message: 'Password is incorrect' });
+    if (user.deletedAt)
+      return res.status(403).json({ success: false, message: 'This account has been removed. Contact support.' });
     if (user.status === 'Suspended')
       return res.status(403).json({ success: false, message: 'This account has been suspended. Contact support.' });
 
@@ -241,6 +245,28 @@ router.put('/change-password', protect, authLimiter, async (req, res) => {
   }
 });
 
+// DELETE /api/auth/account — permanently remove the signed-in patient's login account
+router.delete('/account', protect, authLimiter, async (req, res) => {
+  try {
+    if (req.user.role !== 'patient') {
+      return res.status(403).json({ success: false, message: 'Only patient accounts can be deleted here' });
+    }
+
+    const user = await User.findOneAndDelete({ _id: req.user.id, role: 'patient' });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Patient account not found' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Your account was deleted. Existing healthcare records have been retained.',
+    });
+  } catch (err) {
+    console.error('Delete patient account error:', err);
+    return res.status(500).json({ success: false, message: 'Could not delete your account. Please try again.' });
+  }
+});
+
 // POST /api/auth/signup
 router.post('/signup', otpLimiter, async (req, res) => {
   try {
@@ -254,7 +280,7 @@ router.post('/signup', otpLimiter, async (req, res) => {
     const normalizedEmail = String(email).trim().toLowerCase();
 
     const exists = await User.findOne({ email: normalizedEmail });
-    if (exists)
+    if (exists && !exists.deletedAt)
       return res.status(400).json({
         success: false,
         message: 'Another user already has an account with this email address. Please sign in or use a different email.',
@@ -273,6 +299,10 @@ router.post('/signup', otpLimiter, async (req, res) => {
         success: false,
         message: 'Please verify your email with the 6-digit code first.',
       });
+    }
+
+    if (exists?.deletedAt) {
+      await exists.deleteOne();
     }
 
     const user = await User.create({

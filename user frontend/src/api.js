@@ -47,6 +47,9 @@ export const login = (email, password) =>
 export const changePassword = (currentPassword, newPassword) =>
   handle(fetch(`${BASE}/auth/change-password`, { method: 'PUT', headers: headers(), body: JSON.stringify({ currentPassword, newPassword }) }));
 
+export const deleteAccount = () =>
+  handle(fetch(`${BASE}/auth/account`, { method: 'DELETE', headers: headers() }));
+
 export const sendOtp = (email, purpose = 'signup') =>
   handle(fetch(`${BASE}/auth/send-otp`, { method: 'POST', headers: headers(), body: JSON.stringify({ email, purpose }) }));
 

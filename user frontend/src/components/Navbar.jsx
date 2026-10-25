@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { changePassword } from '../api.js';
+import { changePassword, deleteAccount } from '../api.js';
 
 export default function Navbar({
   activeModule,
@@ -18,6 +18,9 @@ export default function Navbar({
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
+  const [isDeleteAccountOpen, setIsDeleteAccountOpen] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState('');
+  const [deleteAccountSaving, setDeleteAccountSaving] = useState(false);
 
   const handleProfileAction = (module) => {
     setActiveModule(module);
@@ -56,6 +59,20 @@ export default function Navbar({
       setPasswordError(error.message || 'Could not change password.');
     } finally {
       setPasswordSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteAccountSaving(true);
+    setDeleteAccountError('');
+    try {
+      await deleteAccount();
+      setIsDeleteAccountOpen(false);
+      onLogout();
+    } catch (error) {
+      setDeleteAccountError(error.message || 'Could not delete your account.');
+    } finally {
+      setDeleteAccountSaving(false);
     }
   };
 
@@ -164,6 +181,20 @@ export default function Navbar({
                     <i className="fas fa-key" style={{ color: '#078930', width: '16px' }}></i>
                     <span>{currentLang === 'am' ? 'የይለፍ ቃል ቀይር' : 'Change password'}</span>
                   </button>
+                  {currentUser.role === 'patient' && (
+                    <button type="button" onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      setDeleteAccountError('');
+                      setIsDeleteAccountOpen(true);
+                    }}
+                      style={{ width: '100%', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#da121a', textAlign: 'left' }}
+                      onMouseEnter={(event) => { event.currentTarget.style.background = '#fff5f5'; }}
+                      onMouseLeave={(event) => { event.currentTarget.style.background = 'none'; }}
+                    >
+                      <i className="fas fa-user-times" style={{ width: '16px' }}></i>
+                      <span>{currentLang === 'am' ? 'መለያ ሰርዝ' : 'Delete account'}</span>
+                    </button>
+                  )}
                   <button type="button" onClick={() => { onLogout(); setIsProfileMenuOpen(false); }}
                     style={{ width: '100%', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#da121a', textAlign: 'left' }}
                     onMouseEnter={(e) => e.currentTarget.style.background = '#fff5f5'}
@@ -226,6 +257,31 @@ export default function Navbar({
             </>
           )}
         </form>
+      </div>
+    )}
+    {isDeleteAccountOpen && (
+      <div className="modal-overlay" role="presentation" onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !deleteAccountSaving) setIsDeleteAccountOpen(false);
+      }}>
+        <div className="modal-box" role="alertdialog" aria-modal="true" aria-labelledby="delete-account-title" style={{ maxWidth: '440px' }}>
+          <div className="password-dialog-heading">
+            <div className="password-dialog-icon" style={{ color: '#da121a', background: '#fff0f0' }}><i className="fas fa-user-times"></i></div>
+            <h2 id="delete-account-title">{currentLang === 'am' ? 'መለያዎን ይሰርዙ?' : 'Delete your account?'}</h2>
+            <p>{currentLang === 'am'
+              ? 'የመግቢያ መለያዎ በቋሚነት ይሰረዛል እና ከመለያዎ ይወጣሉ። የቀጠሮ፣ የህክምና እና የገንዘብ መዝገቦች ይቀመጣሉ።'
+              : 'Your login account will be permanently deleted and you will be signed out. Existing appointments, medical documents, queue entries, and financial records will be kept. Your email can be used to create a new account.'}</p>
+          </div>
+          {deleteAccountError && <div className="password-dialog-alert password-dialog-error" role="alert">{deleteAccountError}</div>}
+          <div className="password-dialog-actions">
+            <button className="btn btn-outline" type="button" onClick={() => setIsDeleteAccountOpen(false)} disabled={deleteAccountSaving}>
+              {currentLang === 'am' ? 'ተወው' : 'Cancel'}
+            </button>
+            <button className="btn" type="button" onClick={handleDeleteAccount} disabled={deleteAccountSaving} style={{ background: '#da121a', color: '#fff' }}>
+              <i className={`fas ${deleteAccountSaving ? 'fa-spinner fa-spin' : 'fa-trash'}`}></i>
+              {deleteAccountSaving ? (currentLang === 'am' ? 'በመሰረዝ ላይ...' : 'Deleting...') : (currentLang === 'am' ? 'መለያ ሰርዝ' : 'Permanently delete')}
+            </button>
+          </div>
+        </div>
       </div>
     )}
     </>
