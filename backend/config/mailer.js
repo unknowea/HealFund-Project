@@ -29,6 +29,43 @@ const createTransporter = () => {
 
 const transporter = createTransporter();
 const senderAddress = () => process.env.EMAIL_FROM || process.env.EMAIL_USER || process.env.SMTP_USER || 'HealFundET@gmail.com';
+const formatSender = () => {
+  const address = senderAddress();
+  return address.includes('<') ? address : `"HealFund" <${address}>`;
+};
+
+const sendEmail = async (mailOptions) => {
+  if (process.env.RESEND_API_KEY) {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: mailOptions.from,
+        to: [mailOptions.to],
+        subject: mailOptions.subject,
+        text: mailOptions.text,
+        html: mailOptions.html,
+        ...(mailOptions.replyTo ? { reply_to: mailOptions.replyTo } : {}),
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result.message || `Resend email request failed (${response.status})`);
+    }
+    return { messageId: result.id };
+  }
+
+  if (!transporter) {
+    throw new Error('Email delivery is not configured. Set RESEND_API_KEY or configure SMTP in the backend environment.');
+  }
+
+  return transporter.sendMail(mailOptions);
+};
+
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
   '&': '&amp;',
   '<': '&lt;',
@@ -38,10 +75,6 @@ const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => (
 })[character]);
 
 export const sendCustomerReplyEmail = async ({ toEmail, recipientName, category, originalMessage, replyText }) => {
-  if (!transporter) {
-    throw new Error('Email delivery is not configured. Set EMAIL_SERVICE, EMAIL_USER, and EMAIL_PASS in the backend environment.');
-  }
-
   const safeName = escapeHtml(recipientName || 'there');
   const safeCategory = escapeHtml(category || 'HealFund inquiry');
   const safeOriginal = escapeHtml(originalMessage || '');
@@ -49,8 +82,8 @@ export const sendCustomerReplyEmail = async ({ toEmail, recipientName, category,
   const textReply = String(replyText).replace(/\r?\n/g, '\n');
 
   try {
-    const info = await transporter.sendMail({
-      from: `"HealFund" <${senderAddress()}>`,
+    const info = await sendEmail({
+      from: formatSender(),
       to: toEmail,
       replyTo: senderAddress(),
       subject: `Re: ${category || 'Your HealFund inquiry'}`,
@@ -81,14 +114,6 @@ export const sendCustomerReplyEmail = async ({ toEmail, recipientName, category,
  * @param {string} purpose - Purpose of OTP ('signup', 'login', 'reset-password')
  */
 export const sendOtpEmail = async (toEmail, otp, purpose = 'signup') => {
-  if (!transporter) {
-    throw new Error(
-      'Email delivery is not configured. Set EMAIL_SERVICE, EMAIL_USER, and EMAIL_PASS in backend/.env.'
-    );
-  }
-
-  const senderAddress = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'HealFundET@gmail.com';
-
   let purposeTitle = 'Account Verification';
   let purposeDescription = 'Thank you for choosing HealFund. Use the One-Time Password (OTP) below to verify your email address.';
 
@@ -150,7 +175,7 @@ export const sendOtpEmail = async (toEmail, otp, purpose = 'signup') => {
   const textContent = `HealFund ${purposeTitle}\n\nYour One-Time Password (OTP) is: ${otp}\n\nThis code is valid for 10 minutes.\nNever share this code with anyone.`;
 
   const mailOptions = {
-    from: `"HealFund" <${senderAddress}>`,
+    from: formatSender(),
     to: toEmail,
     subject: `${otp} is your HealFund verification code`,
     text: textContent,
@@ -158,7 +183,7 @@ export const sendOtpEmail = async (toEmail, otp, purpose = 'signup') => {
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
+    const info = await sendEmail(mailOptions);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('Failed to send email:', error);
