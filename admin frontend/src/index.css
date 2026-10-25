@@ -1374,24 +1374,20 @@ body {
 .gender-choice-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid #d5e1da;
-  border-radius: 11px;
-  background: #f4f8f5;
+  gap: 10px;
 }
 
 .gender-choice-button {
   display: flex;
   min-width: 0;
-  min-height: 40px;
+  min-height: 48px;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
+  padding: 9px 12px;
+  border: 1px solid #dce8e0;
+  border-radius: 12px;
+  background: #fff;
   color: #637567;
   font: inherit;
   font-size: 13px;
@@ -1403,7 +1399,8 @@ body {
 
 .gender-choice-button:hover {
   color: #0d5a3d;
-  background: #eaf4ed;
+  border-color: #a9cfb5;
+  background: #f5faf6;
 }
 
 .gender-choice-button:active {
@@ -1411,22 +1408,30 @@ body {
 }
 
 .gender-choice-button:focus-visible {
-  outline: 3px solid rgba(7, 137, 48, 0.25);
-  outline-offset: 1px;
+  outline: 3px solid rgba(7, 137, 48, 0.2);
+  outline-offset: 2px;
 }
 
 .gender-choice-button.selected {
   color: #0d5a3d;
-  background: #fff;
-  border-color: #a9cfb5;
-  box-shadow: 0 1px 3px rgba(13, 90, 61, 0.1);
+  background: #edf7f0;
+  border-color: #16804e;
+  box-shadow: 0 2px 6px rgba(13, 90, 61, 0.1);
 }
 
 .gender-choice-button i {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: #f0f5f1;
   color: #829488;
 }
 
 .gender-choice-button.selected i {
+  background: #d9efdf;
   color: #078930;
 }
 
