@@ -185,6 +185,9 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, currentLang
     setLoading(true);
     try {
       const data = await login(email, password);
+      if (!data?.token || data.user?.role !== 'patient') {
+        throw new Error('Use the patient sign-in portal for this account');
+      }
       localStorage.removeItem('healfund_token');
       localStorage.removeItem('healfund_user');
       sessionStorage.removeItem('healfund_token');
@@ -265,9 +268,15 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, currentLang
         gender,
         location,
       });
+      localStorage.removeItem('healfund_token');
+      localStorage.removeItem('healfund_user');
+      localStorage.removeItem('healfund_remember_me');
+      sessionStorage.removeItem('healfund_token');
+      sessionStorage.removeItem('healfund_user');
       sessionStorage.setItem('healfund_token', data.token);
       sessionStorage.setItem('healfund_user', JSON.stringify(data.user));
       onLoginSuccess(data.user);
+      resetForm();
       onClose();
     } catch (err) {
       setError(err.message || 'Registration failed. Invalid or expired OTP.');
@@ -344,6 +353,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, currentLang
 
     setLoading(true);
     try {
+      await verifyOtp(email, otp.trim(), 'reset-password');
       await resetPasswordWithOtp(email, otp.trim(), newPassword);
       setMode('login');
       setForgotStep('email');

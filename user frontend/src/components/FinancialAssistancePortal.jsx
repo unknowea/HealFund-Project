@@ -4,12 +4,14 @@ import { getFinancialCases, donate, verifyDonation } from '../api.js';
 export default function FinancialAssistancePortal({ currentLang }) {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [selectedCase, setSelectedCase] = useState(null);
   const [donationAmount, setDonationAmount] = useState('1000');
   const [donorName, setDonorName] = useState('');
   const [donorEmail, setDonorEmail] = useState('');
   const [donationErrorMsg, setDonationErrorMsg] = useState('');
   const [donationSuccessMsg, setDonationSuccessMsg] = useState('');
+  const [donationResultKind, setDonationResultKind] = useState('success');
   const [paymentError, setPaymentError] = useState('');
   const [donating, setDonating] = useState(false);
 
@@ -30,11 +32,16 @@ export default function FinancialAssistancePortal({ currentLang }) {
 
   const fetchCases = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const data = await getFinancialCases();
+      if (!data.success || !Array.isArray(data.cases)) {
+        throw new Error(data.message || 'Could not load financial cases');
+      }
       setCases(data.cases || []);
     } catch (err) {
       console.error('Fetch financial cases error:', err.message);
+      setLoadError(err.message || 'Could not load financial cases.');
     } finally {
       setLoading(false);
     }
@@ -44,10 +51,12 @@ export default function FinancialAssistancePortal({ currentLang }) {
     try {
       const data = await verifyDonation(txRef);
       await fetchCases();
+      setDonationResultKind(data.status === 'Paid' ? 'success' : 'pending');
       setDonationSuccessMsg(data.status === 'Paid'
         ? 'Payment confirmed. Thank you for supporting this patient.'
         : data.message || 'Payment is still awaiting confirmation.');
     } catch (err) {
+      setDonationResultKind('error');
       setDonationSuccessMsg(`Payment verification failed: ${err.message}`);
     } finally {
       const params = new URLSearchParams(window.location.search);
@@ -110,7 +119,11 @@ export default function FinancialAssistancePortal({ currentLang }) {
       </div>
 
       {donationSuccessMsg && (
-        <div style={{ background: '#d4edda', color: '#155724', padding: '16px 20px', borderRadius: '14px', marginBottom: '24px', fontWeight: 600, fontSize: '15px' }}>
+        <div role={donationResultKind === 'error' ? 'alert' : 'status'} style={{
+          background: donationResultKind === 'error' ? '#fff1f0' : donationResultKind === 'pending' ? '#fff7e6' : '#d4edda',
+          color: donationResultKind === 'error' ? '#a8071a' : donationResultKind === 'pending' ? '#8a5b00' : '#155724',
+          padding: '16px 20px', borderRadius: '14px', marginBottom: '24px', fontWeight: 600, fontSize: '15px',
+        }}>
           {donationSuccessMsg}
           <button onClick={() => setDonationSuccessMsg('')} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#155724' }}>✕</button>
         </div>
@@ -134,10 +147,17 @@ export default function FinancialAssistancePortal({ currentLang }) {
           <i className="fas fa-spinner fa-spin" style={{ fontSize: '32px', marginBottom: '12px', display: 'block' }}></i>
           Loading cases...
         </div>
+      ) : loadError ? (
+        <div role="alert" className="card" style={{ textAlign: 'center', color: '#a8071a' }}>
+          <p>{loadError}</p>
+          <button type="button" className="btn btn-outline" onClick={fetchCases}>Retry</button>
+        </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '24px' }}>
           {cases.map((c) => {
-            const pct = Math.min(100, Math.round((c.raisedAmount / c.targetAmount) * 100));
+            const targetAmount = Number(c.targetAmount) || 0;
+            const raisedAmount = Number(c.raisedAmount) || 0;
+            const pct = targetAmount > 0 ? Math.min(100, Math.round((raisedAmount / targetAmount) * 100)) : 0;
             return (
               <div key={c.caseId} className="card" style={{ borderTop: '5px solid #078930', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
@@ -154,21 +174,31 @@ export default function FinancialAssistancePortal({ currentLang }) {
                   </div>
                   <div style={{ marginBottom: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '6px' }}>
-                      <span><strong>{c.raisedAmount.toLocaleString()} ETB</strong> raised</span>
-                      <span style={{ color: '#7a8a9e' }}>Goal: {c.targetAmount.toLocaleString()} ETB</span>
+                      <span><strong>{raisedAmount.toLocaleString()} ETB</strong> raised</span>
+                      <span style={{ color: '#7a8a9e' }}>Goal: {targetAmount.toLocaleString()} ETB</span>
                     </div>
                     <div className="progress-container"><div className="progress-bar-fill" style={{ width: `${pct}%` }}></div></div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#5e6f82', marginTop: '4px' }}>
-                      <span>{pct}% Funded</span><span>{c.donorsCount} Supporters</span>
+                      <span>{pct}% Funded</span>                      <span>{Number(c.donorsCount || 0)} Supporters</span>
                     </div>
                   </div>
                 </div>
-                <button className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }} onClick={() => { setSelectedCase(c); setDonationErrorMsg(''); }} disabled={Number(c.targetAmount) - Number(c.raisedAmount) - Number(c.pendingAmount || 0) < 1}>
+                <button className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }} onClick={() => {
+                  setSelectedCase(c);
+                  setDonationAmount(String(Math.min(1000, Math.max(0, Number(c.targetAmount) - Number(c.raisedAmount) - Number(c.pendingAmount || 0)))));
+                  setDonationErrorMsg('');
+                  setPaymentError('');
+                }} disabled={Number(c.targetAmount) - Number(c.raisedAmount) - Number(c.pendingAmount || 0) < 1}>
                   <i className="fas fa-donate"></i> Support This Verified Case
                 </button>
               </div>
             );
           })}
+          {cases.length === 0 && (
+            <div className="card" style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#5e6f82' }}>
+              No verified financial assistance cases are available right now.
+            </div>
+          )}
         </div>
       )}
 

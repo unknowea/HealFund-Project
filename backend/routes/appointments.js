@@ -29,6 +29,18 @@ const getUploadPath = (filename) => {
     : null;
 };
 
+const removeUploadedFiles = async (files = []) => {
+  await Promise.all(files.map(async (file) => {
+    try {
+      await fs.promises.unlink(path.join(uploadDir, file.filename));
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        console.error('Could not clean up uploaded appointment file:', error);
+      }
+    }
+  }));
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
@@ -56,7 +68,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB per file limit
+  limits: { fileSize: 25 * 1024 * 1024, files: 10 },
 });
 
 // Helper to format appointment object for frontend consumption
@@ -196,16 +208,20 @@ router.get('/:id', protect, async (req, res) => {
 router.post('/', protect, (req, res, next) => {
   upload.any()(req, res, (err) => {
     if (err) {
-      for (const file of req.files || []) fs.unlink(path.join(uploadDir, file.filename), () => {});
-      return res.status(400).json({ success: false, message: err.message });
+      return removeUploadedFiles(req.files || []).then(() => res.status(400).json({ success: false, message: err.message }));
     }
     next();
   });
 }, async (req, res) => {
-  try {
-    // Explicitly strip any stringified supportingFiles from req.body — files always come from req.files (multer)
-    delete req.body.supportingFiles;
+  const filesList = req.files || [];
+  const documentIds = [];
+  let appointment;
+  const reject = async (status, message) => {
+    await removeUploadedFiles(filesList);
+    return res.status(status).json({ success: false, message });
+  };
 
+  try {
     const {
       isForSelf,
       patientName,
@@ -218,62 +234,91 @@ router.post('/', protect, (req, res, next) => {
       patientPhone,
     } = req.body;
 
-    // Always use the authenticated user's ID as bookedByUserId — prevents spoofing
-    const bookedByUserId = req.user.id;
-    const bookingUser = await User.findById(bookedByUserId).select('name age gender patientId').lean();
-    if (!bookingUser?.patientId)
-      return res.status(401).json({ success: false, message: 'Patient account is not available' });
-
+    if (!['true', 'false', true, false].includes(isForSelf)) {
+      return reject(400, 'Choose whether the appointment is for you or someone else');
+    }
     const isSelf = isForSelf === true || isForSelf === 'true';
+    if (typeof disease !== 'string' || !disease.trim() || disease.trim().length > 2000) {
+      return reject(400, 'Describe the medical condition in 1 to 2,000 characters');
+    }
+    if (typeof preferredDepartment !== 'string' || !preferredDepartment.trim() || preferredDepartment.trim().length > 120) {
+      return reject(400, 'Choose a department using 1 to 120 characters');
+    }
+    if (urgency !== undefined && !['Routine', 'Low', 'Medium', 'High', 'Emergency'].includes(urgency)) {
+      return reject(400, 'Select a valid urgency level');
+    }
+    if (patientPhone !== undefined && (typeof patientPhone !== 'string' || patientPhone.trim().length > 30)) {
+      return reject(400, 'Phone number must be 30 characters or fewer');
+    }
+    if (!isSelf && (typeof patientName !== 'string' || !patientName.trim() || patientName.trim().length > 120)) {
+      return reject(400, 'Patient name is required and must be 120 characters or fewer');
+    }
+    const parsedAge = patientAge === undefined || patientAge === '' ? undefined : Number(patientAge);
+    if (!isSelf && parsedAge !== undefined && (!Number.isInteger(parsedAge) || parsedAge < 0 || parsedAge > 120)) {
+      return reject(400, 'Patient age must be a whole number between 0 and 120');
+    }
+    if (!isSelf && patientGender && !['Male', 'Female', 'Other'].includes(patientGender)) {
+      return reject(400, 'Select a valid patient gender');
+    }
+    if (!isSelf && relationship && !['Child', 'Parent', 'Spouse', 'Sibling', 'Relative', 'Other', 'Dependent'].includes(relationship)) {
+      return reject(400, 'Select a valid relationship');
+    }
+    if (filesList.some((file) => file.originalname.length > 255)) {
+      return reject(400, 'File names must be 255 characters or fewer');
+    }
+
+    const bookingUser = await User.findById(req.user.id).select('name age gender patientId').lean();
+    if (!bookingUser?.patientId)
+      return reject(401, 'Patient account is not available');
+
     const effectivePatientId = bookingUser.patientId;
-    const effectivePatientName = isSelf ? bookingUser.name : patientName || 'Dependent Patient';
+    const effectivePatientName = isSelf ? bookingUser.name : patientName.trim();
 
     const supportingFiles = [];
-    const filesList = req.files || (req.file ? [req.file] : []);
-
-    for (const f of filesList) {
-      const ext = f.originalname.split('.').pop().toLowerCase();
-      const docId = `DOC-${String(Date.now()).slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+    const documents = filesList.map((file) => {
+      const ext = path.extname(file.originalname).slice(1).toLowerCase();
+      const docId = `DOC-${randomUUID()}`;
+      documentIds.push(docId);
       const fileObj = {
         id: docId,
-        originalName: f.originalname,
-        filename: f.filename,
-        size: (f.size / (1024 * 1024)).toFixed(2) + ' MB',
+        originalName: file.originalname,
+        filename: file.filename,
+        size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
         type: ext,
         uploadDate: new Date(),
       };
       supportingFiles.push(fileObj);
-
-      await PatientDocument.create({
+      return {
         documentId: docId,
         patientId: effectivePatientId,
         patientName: effectivePatientName,
-        originalName: f.originalname,
-        filename: f.filename,
+        originalName: file.originalname,
+        filename: file.filename,
         size: fileObj.size,
         type: ext,
         category: 'Appointment Supporting Document',
         status: 'Pending Verification',
-      });
-    }
+      };
+    });
 
-    const appointment = await Appointment.create({
+    appointment = await Appointment.create({
       patientId: effectivePatientId,
-      bookedByUserId: bookedByUserId || effectivePatientId,
+      bookedByUserId: req.user.id,
       isForSelf: isSelf,
       patientName: effectivePatientName,
-      patientAge: isSelf ? bookingUser.age : patientAge ? parseInt(patientAge, 10) : undefined,
+      patientAge: isSelf ? bookingUser.age : parsedAge,
       patientGender: isSelf ? bookingUser.gender : patientGender || 'Unspecified',
       relationship: isSelf ? 'Self' : relationship || 'Other',
       urgency: urgency || 'Medium',
-      disease: disease || 'General health consultation',
-      preferredDepartment: preferredDepartment || 'General Medicine',
-      patientPhone: patientPhone || '',
+      disease: disease.trim(),
+      preferredDepartment: preferredDepartment.trim(),
+      patientPhone: patientPhone?.trim() || '',
       hospitalName: 'Zewditu Memorial Hospital',
       status: 'Pending Review',
       supportingFiles,
       requestedAt: new Date(),
     });
+    if (documents.length) await PatientDocument.insertMany(documents);
 
     res.status(201).json({
       success: true,
@@ -281,7 +326,23 @@ router.post('/', protect, (req, res, next) => {
       appointment: serializeAppt(appointment),
     });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    if (documentIds.length) {
+      try {
+        await PatientDocument.deleteMany({ documentId: { $in: documentIds } });
+      } catch (cleanupError) {
+        console.error('Could not clean up appointment document records:', cleanupError);
+      }
+    }
+    if (appointment) {
+      try {
+        await appointment.deleteOne();
+      } catch (cleanupError) {
+        console.error('Could not clean up failed appointment:', cleanupError);
+      }
+    }
+    await removeUploadedFiles(filesList);
+    console.error('Could not create patient appointment:', err);
+    res.status(err.statusCode || 500).json({ success: false, message: err.statusCode ? err.message : 'Could not create appointment' });
   }
 });
 
@@ -444,6 +505,9 @@ router.post('/:id/upload-additional-docs', protect, async (req, res, next) => {
     if (!appointment) return res.status(404).json({ success: false, message: 'Appointment not found' });
     if (!await canAccessAppointment(req.user, appointment))
       return res.status(403).json({ success: false, message: 'Access denied' });
+    if (appointment.status !== 'Additional Documents Required') {
+      return res.status(409).json({ success: false, message: 'Additional documents were not requested for this appointment' });
+    }
     next();
   } catch (err) {
     next(err);
@@ -451,48 +515,60 @@ router.post('/:id/upload-additional-docs', protect, async (req, res, next) => {
 }, (req, res, next) => {
   upload.any()(req, res, (err) => {
     if (err) {
-      for (const file of req.files || []) fs.unlink(path.join(uploadDir, file.filename), () => {});
-      return res.status(400).json({ success: false, message: err.message });
+      return removeUploadedFiles(req.files || []).then(() => res.status(400).json({ success: false, message: err.message }));
     }
     next();
   });
 }, async (req, res) => {
+  const filesList = req.files || [];
+  const documentIds = [];
   try {
     const appt = await findApptById(req.params.id);
-    if (!appt) return res.status(404).json({ success: false, message: 'Appointment not found' });
+    if (!appt) {
+      await removeUploadedFiles(filesList);
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+    if (appt.status !== 'Additional Documents Required') {
+      await removeUploadedFiles(filesList);
+      return res.status(409).json({ success: false, message: 'Additional documents were not requested for this appointment' });
+    }
 
-    const filesList = req.files || (req.file ? [req.file] : []);
     if (filesList.length === 0) return res.status(400).json({ success: false, message: 'No files uploaded' });
+    if (filesList.some((file) => file.originalname.length > 255)) {
+      await removeUploadedFiles(filesList);
+      return res.status(400).json({ success: false, message: 'File names must be 255 characters or fewer' });
+    }
 
     if (!appt.supportingFiles) appt.supportingFiles = [];
 
-    for (const f of filesList) {
-      const ext = f.originalname.split('.').pop().toLowerCase();
-      const docId = `DOC-${String(Date.now()).slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+    const documents = filesList.map((file) => {
+      const ext = path.extname(file.originalname).slice(1).toLowerCase();
+      const docId = `DOC-${randomUUID()}`;
+      documentIds.push(docId);
       const fileObj = {
         id: docId,
-        originalName: f.originalname,
-        filename: f.filename,
-        size: (f.size / (1024 * 1024)).toFixed(2) + ' MB',
+        originalName: file.originalname,
+        filename: file.filename,
+        size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
         type: ext,
         uploadDate: new Date(),
       };
       appt.supportingFiles.push(fileObj);
-
-      await PatientDocument.create({
+      return {
         documentId: docId,
         patientId: appt.patientId,
         patientName: appt.patientName,
-        originalName: f.originalname,
-        filename: f.filename,
+        originalName: file.originalname,
+        filename: file.filename,
         size: fileObj.size,
         type: ext,
         category: 'Requested Additional Medical Document',
         status: 'Pending Verification',
-      });
-    }
+      };
+    });
 
     appt.status = 'Pending Review';
+    await PatientDocument.insertMany(documents);
     await appt.save();
 
     res.json({
@@ -501,7 +577,16 @@ router.post('/:id/upload-additional-docs', protect, async (req, res, next) => {
       appointment: serializeAppt(appt),
     });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    if (documentIds.length) {
+      try {
+        await PatientDocument.deleteMany({ documentId: { $in: documentIds } });
+      } catch (cleanupError) {
+        console.error('Could not clean up additional appointment document records:', cleanupError);
+      }
+    }
+    await removeUploadedFiles(filesList);
+    console.error('Could not upload requested appointment documents:', err);
+    res.status(500).json({ success: false, message: 'Could not upload requested documents' });
   }
 });
 

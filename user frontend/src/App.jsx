@@ -20,20 +20,34 @@ export default function App() {
     const isRemembered = localStorage.getItem('healfund_remember_me') === 'true';
     const rememberedUser = isRemembered ? localStorage.getItem('healfund_user') : null;
     const rememberedToken = isRemembered ? localStorage.getItem('healfund_token') : null;
+    if (!isRemembered) {
+      localStorage.removeItem('healfund_token');
+      localStorage.removeItem('healfund_user');
+    }
     const sessionUser = sessionStorage.getItem('healfund_user');
     const sessionToken = sessionStorage.getItem('healfund_token');
-    const savedUser = rememberedUser || sessionUser;
-    const savedToken = rememberedToken || sessionToken;
-    if (savedUser && savedToken) {
+    const candidates = [
+      { user: rememberedUser, token: rememberedToken, storage: localStorage },
+      { user: sessionUser, token: sessionToken, storage: sessionStorage },
+    ];
+
+    for (const candidate of candidates) {
+      if (!candidate.user || !candidate.token) continue;
       try {
-        setCurrentUser(JSON.parse(savedUser));
+        const user = JSON.parse(candidate.user);
+        if (user?.role === 'patient') {
+          setCurrentUser(user);
+          break;
+        }
+        candidate.storage.removeItem('healfund_token');
+        candidate.storage.removeItem('healfund_user');
       } catch {
-        localStorage.removeItem('healfund_token');
-        localStorage.removeItem('healfund_user');
-        localStorage.removeItem('healfund_remember_me');
-        sessionStorage.removeItem('healfund_token');
-        sessionStorage.removeItem('healfund_user');
+        candidate.storage.removeItem('healfund_token');
+        candidate.storage.removeItem('healfund_user');
       }
+    }
+    if (!localStorage.getItem('healfund_token') || !localStorage.getItem('healfund_user')) {
+      localStorage.removeItem('healfund_remember_me');
     }
   }, []);
 

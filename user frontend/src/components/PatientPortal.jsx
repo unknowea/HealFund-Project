@@ -1,6 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import QRCode from 'qrcode';
-import { getAppointments, getAppointmentFileBlob, createAppointment, uploadFile, uploadAdditionalAppointmentDocs, sendMessage, getProfile, updateProfile, getPublicStats } from '../api.js';
+import React, { useState, useEffect } from 'react';
+import { getAppointments, getAppointmentFileBlob, createAppointment, uploadFile, uploadAdditionalAppointmentDocs, sendMessage, updateProfile, getPublicStats } from '../api.js';
+
+const APPOINTMENT_FILE_EXTENSIONS = new Set([
+  'pdf', 'doc', 'docx', 'txt', 'rtf', 'odt', 'jpg', 'jpeg', 'png', 'webp',
+  'bmp', 'gif', 'tiff', 'heic', 'dcm', 'dicom', 'xls', 'xlsx', 'csv', 'zip', 'rar', '7z',
+]);
+const MAX_APPOINTMENT_FILES = 10;
+const MAX_APPOINTMENT_FILE_SIZE = 25 * 1024 * 1024;
 
 function GenderChoice({ value, onChange, isAm = false }) {
   return (
@@ -34,15 +40,16 @@ export default function PatientPortal({
   const activeTab = propActiveTab || internalTab;
   const setActiveTab = propSetActiveTab || setInternalTab;
 
-  const [selectedSlot, setSelectedSlot] = useState('Today 4:30 PM');
   const [appointmentsList, setAppointmentsList] = useState([]);
   const [apptLoading, setApptLoading] = useState(false);
+  const [apptError, setApptError] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [fileProgress, setFileProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
+  const [fileUploading, setFileUploading] = useState(false);
   const [modalMessage, setModalMessage] = useState(null);
   const [heroSlide, setHeroSlide] = useState(0);
-  const [homeStats, setHomeStats] = useState({ patients: '…', verification: '…', centers: '…' });
+  const [homeStats, setHomeStats] = useState({ patients: '…', centers: '…', cases: '…' });
   const isAm = currentLang === 'am';
 
   const heroSlides = [
@@ -145,11 +152,12 @@ export default function PatientPortal({
   const [bookDepartment, setBookDepartment] = useState('General Medicine');
   const [bookPhone, setBookPhone] = useState('');
   const [bookFiles, setBookFiles] = useState([]);
+  const [bookFileError, setBookFileError] = useState('');
   const [bookSubmitting, setBookSubmitting] = useState(false);
 
   // Additional document upload state
-  const [activeUploadDocAptId, setActiveUploadDocAptId] = useState(null);
   const [additionalDocFile, setAdditionalDocFile] = useState(null);
+  const [additionalDocError, setAdditionalDocError] = useState('');
   const [additionalDocUploading, setAdditionalDocUploading] = useState(false);
 
   // Profile editing state
@@ -195,14 +203,34 @@ export default function PatientPortal({
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { setProfileMsg('❌ Photo must be under 2MB'); return; }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setProfileMsg('❌ Choose a PNG, JPEG, or WebP image.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setProfileMsg('❌ Photo must be under 2MB');
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = (ev) => setEditPhoto(ev.target.result);
+    reader.onload = (ev) => {
+      if (typeof ev.target.result === 'string') {
+        setEditPhoto(ev.target.result);
+        setProfileMsg('');
+      }
+    };
+    reader.onerror = () => setProfileMsg('❌ Could not read the selected photo.');
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    if (!editName.trim()) {
+      setProfileMsg(isAm ? 'እባክዎ ስም ያስገቡ።' : 'Name is required.');
+      return;
+    }
     setProfileSaving(true);
     setProfileMsg('');
     try {
@@ -228,12 +256,17 @@ export default function PatientPortal({
 
   const fetchAppointments = async () => {
     setApptLoading(true);
+    setApptError('');
     try {
       // Don't pass patientId — backend determines it from the JWT token
       const data = await getAppointments({});
+      if (!data.success || !Array.isArray(data.appointments)) {
+        throw new Error(data.message || 'Could not load appointments.');
+      }
       setAppointmentsList(data.appointments || []);
     } catch (err) {
       console.warn('Could not fetch appointments:', err.message);
+      setApptError(err.message || 'Could not load appointments.');
     } finally {
       setApptLoading(false);
     }
@@ -241,27 +274,53 @@ export default function PatientPortal({
 
   const handleFileUpload = (file) => {
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { setUploadStatus('❌ File too large. Max 10MB.'); return; }
+    if (file.size > 10 * 1024 * 1024) { setUploadedFile(null); setUploadStatus('❌ File too large. Max 10MB.'); return; }
     const ext = file.name.split('.').pop().toLowerCase();
     if (!['pdf', 'jpg', 'jpeg', 'png'].includes(ext)) {
+      setUploadedFile(null);
       setUploadStatus('❌ Invalid type. Upload PDF, JPG, or PNG.'); return;
     }
     setUploadedFile(file);
+    setFileProgress(0);
     setUploadStatus(`Ready: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`);
   };
 
+  const handleBookFilesSelected = (selectedFiles) => {
+    const incoming = Array.from(selectedFiles || []);
+    if (!incoming.length) return;
+    const invalidFile = incoming.find((file) => {
+      const extension = file.name.split('.').pop().toLowerCase();
+      return !APPOINTMENT_FILE_EXTENSIONS.has(extension) || file.size > MAX_APPOINTMENT_FILE_SIZE;
+    });
+    if (invalidFile) {
+      setBookFileError(`${invalidFile.name}: choose a supported file under 25 MB.`);
+      return;
+    }
+    if (bookFiles.length + incoming.length > MAX_APPOINTMENT_FILES) {
+      setBookFileError(`You can attach up to ${MAX_APPOINTMENT_FILES} files per appointment.`);
+      return;
+    }
+    setBookFiles((currentFiles) => [...currentFiles, ...incoming]);
+    setBookFileError('');
+  };
+
   const submitFileVerification = async () => {
-    if (!uploadedFile) return;
+    if (!uploadedFile || fileUploading) return;
+    setFileUploading(true);
     setFileProgress(30);
     try {
       setFileProgress(70);
       const data = await uploadFile(uploadedFile);
+      if (!data.success) throw new Error(data.message || 'Could not submit the medical document.');
       setFileProgress(100);
       setUploadStatus('✅ ' + data.message);
+      setUploadedFile(null);
       setModalMessage('Your medical document has been submitted to Zewditu Memorial Hospital for verification.');
     } catch (err) {
       setFileProgress(100);
       setUploadStatus(`❌ Upload failed: ${err.message || 'Please try again.'}`);
+    } finally {
+      setFileUploading(false);
     }
   };
 
@@ -292,10 +351,14 @@ export default function PatientPortal({
       }
 
       const res = await createAppointment(formData);
-      if (res.success) {
-        setAppointmentsList([res.appointment, ...appointmentsList]);
+      if (!res.success || !res.appointment) {
+        throw new Error(res.message || 'Could not submit the appointment request.');
+      }
+        setAppointmentsList((appointments) => [res.appointment, ...appointments]);
+        setApptError('');
         setBookDisease('');
         setBookFiles([]);
+        setBookFileError('');
         setBookPhone('');
         if (!isForSelf) {
           setBookPatientName('');
@@ -307,7 +370,6 @@ export default function PatientPortal({
             ? 'የቀጠሮ ጥያቄዎ በተሳካ ሁኔታ ተልኳል! ሆስፒታሉ የህመምዎን አጣዳፊነት ገምግሞ ክፍል እና የ10 ደቂቃ ተራ ቁጥር ይመድብልዎታል።'
             : 'Appointment request submitted successfully! Hospital administration will triage your request, assign your Department and Room Number, and allocate your ~10-minute queue slot.'
         );
-      }
     } catch (err) {
       setModalMessage(isAm ? `ስህተት ተከስቷል: ${err.message}` : `Failed to submit appointment request: ${err.message}`);
     } finally {
@@ -318,22 +380,23 @@ export default function PatientPortal({
   const handleUploadAdditionalDoc = async (appointmentId) => {
     if (!additionalDocFile) return;
     setAdditionalDocUploading(true);
+    setAdditionalDocError('');
     try {
       const res = await uploadAdditionalAppointmentDocs(appointmentId, additionalDocFile);
-      if (res.success) {
+      if (!res.success || !res.appointment) {
+        throw new Error(res.message || 'Could not upload the requested document.');
+      }
         setAppointmentsList((prev) =>
           prev.map((a) => (a.id === appointmentId || a._id === appointmentId ? res.appointment : a))
         );
-        setActiveUploadDocAptId(null);
         setAdditionalDocFile(null);
         setModalMessage(
           isAm
             ? 'ተጨማሪ ሰነድ በተሳካ ሁኔታ ተልኳል! የሆስፒታሉ አስተዳዳሪ ተመልክቶ ያጸድቀዋል።'
             : 'Additional document submitted successfully! Hospital administration will review your updated file.'
         );
-      }
     } catch (err) {
-      setModalMessage(`Failed to upload document: ${err.message}`);
+      setAdditionalDocError(err.message || 'Could not upload the requested document.');
     } finally {
       setAdditionalDocUploading(false);
     }
@@ -438,15 +501,10 @@ export default function PatientPortal({
             <div className="info-row"><span className="label"><i className="fas fa-venus-mars"></i> {isAm ? 'ጾታ' : 'Gender'}</span><span className="value">{defaultUser.gender}</span></div>
             <div className="info-row"><span className="label"><i className="fas fa-calendar-alt"></i> {isAm ? 'ዕድሜ' : 'Age'}</span><span className="value">{defaultUser.age}</span></div>
             <div className="info-row"><span className="label"><i className="fas fa-map-marker-alt"></i> {isAm ? 'ቦታ' : 'Location'}</span><span className="value">{defaultUser.location}</span></div>
-            {appointmentsList.length > 0 && (
-              <>
-                <div className="info-row">
-                  <span className="label"><i className="fas fa-file-medical-alt"></i> {isAm ? 'ፋይል' : 'File'}</span>
-                  <span className="value"><span className="status-badge status-verified"><i className="fas fa-check-circle"></i> {isAm ? 'ተረጋግጧል' : 'Verified'}</span></span>
-                </div>
-                <div className="info-row"><span className="label"><i className="fas fa-hospital"></i> {isAm ? 'ሆስፒታል' : 'Hospital'}</span><span className="value"><strong>Zewditu Memorial</strong></span></div>
-              </>
-            )}
+            <div className="info-row">
+              <span className="label"><i className="fas fa-shield-alt"></i> {isAm ? 'የመለያ ሁኔታ' : 'Account status'}</span>
+              <span className="value">{defaultUser.status || (isAm ? 'በመጠባበቅ ላይ' : 'Pending')}</span>
+            </div>
             {/* Edit Profile Button */}
             <button className="btn btn-outline" onClick={openProfileEdit} style={{ width: '100%', marginTop: '16px', fontSize: '13px' }}>
               <i className="fas fa-edit"></i> {isAm ? 'መለያ አርትዕ' : 'Edit Profile'}
@@ -455,7 +513,7 @@ export default function PatientPortal({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div className="card">
-              <div className="card-header"><h3><i className="fas fa-stethoscope"></i> {isAm ? 'ፋይል እና ቀጠሮ' : 'File & Appointment'}</h3><span className="status-badge status-verified"><i className="fas fa-check-circle"></i> {isAm ? 'ተረጋግጧል' : 'Verified'}</span></div>
+              <div className="card-header"><h3><i className="fas fa-stethoscope"></i> {isAm ? 'ፋይል እና ቀጠሮ' : 'File & Appointment'}</h3></div>
               <p style={{ color: '#4a5a6e', fontSize: '14px', marginBottom: '16px' }}>
                 {apptLoading ? 'Loading appointments...' : appointmentsList.length > 0
                   ? (() => {
@@ -499,6 +557,11 @@ export default function PatientPortal({
 
             {apptLoading ? (
               <p style={{ color: '#7a8a9e', textAlign: 'center', padding: '24px' }}><i className="fas fa-spinner fa-spin"></i> Loading appointments...</p>
+            ) : apptError ? (
+              <div role="alert" style={{ textAlign: 'center', padding: '24px', color: '#9f242b' }}>
+                <p>{apptError}</p>
+                <button className="btn btn-outline" type="button" onClick={fetchAppointments}>Retry</button>
+              </div>
             ) : appointmentsList.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '32px 16px', color: '#7a8a9e' }}>
                 <i className="fas fa-calendar-times" style={{ fontSize: '36px', marginBottom: '10px', color: '#b0bec5' }}></i>
@@ -517,6 +580,7 @@ export default function PatientPortal({
                   const isPending = apt.status === 'Pending Review' || apt.status === 'Pending';
                   const isRejected = apt.status === 'Rejected';
                   const isCancelled = apt.status === 'Cancelled';
+                  const isCompleted = apt.status === 'Completed';
 
                   return (
                     <div
@@ -525,7 +589,7 @@ export default function PatientPortal({
                         background: '#ffffff',
                         borderRadius: '14px',
                         padding: '18px',
-                        border: `1.5px solid ${isApproved ? '#86efac' : isDocsRequired ? '#fdba74' : (isRejected || isCancelled) ? '#fca5a5' : '#e2e8f0'}`,
+                        border: `1.5px solid ${isApproved || isCompleted ? '#86efac' : isDocsRequired ? '#fdba74' : (isRejected || isCancelled) ? '#fca5a5' : '#e2e8f0'}`,
                         boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
                       }}
                     >
@@ -576,6 +640,11 @@ export default function PatientPortal({
                               <i className="fas fa-ban"></i> {isAm ? 'ቀጠሮ ተሰርዟል' : 'Cancelled by Admin'}
                             </span>
                           )}
+                          {isCompleted && (
+                            <span className="status-badge status-verified" style={{ fontSize: '13px', padding: '6px 14px' }}>
+                              <i className="fas fa-check-circle"></i> {isAm ? 'ተጠናቋል' : 'Completed'}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -597,7 +666,7 @@ export default function PatientPortal({
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', alignItems: 'center' }}>
                             <div>
                               <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#166534', fontWeight: 700 }}>Queue Token</span>
-                              <div style={{ fontSize: '24px', fontWeight: 800, color: '#15803d' }}>{apt.queueToken || 'C-023'}</div>
+                              <div style={{ fontSize: '24px', fontWeight: 800, color: '#15803d' }}>{apt.queueToken || '—'}</div>
                             </div>
                             <div>
                               <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#166534', fontWeight: 700 }}>Department</span>
@@ -606,7 +675,7 @@ export default function PatientPortal({
                             <div>
                               <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#166534', fontWeight: 700 }}>Room Number</span>
                               <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f3b5e' }}>
-                                <i className="fas fa-door-open" style={{ color: '#078930' }}></i> {apt.assignedRoom || 'Room 102'}
+                                <i className="fas fa-door-open" style={{ color: '#078930' }}></i> {apt.assignedRoom || '—'}
                               </div>
                             </div>
                             <div>
@@ -645,8 +714,19 @@ export default function PatientPortal({
                               type="file"
                               id={`additionalDocInput-${apt.id}`}
                               style={{ fontSize: '13px' }}
-                              accept=".pdf,.jpg,.jpeg,.png"
-                              onChange={(e) => setAdditionalDocFile(e.target.files[0])}
+                              accept=".pdf,.doc,.docx,.txt,.rtf,.odt,.jpg,.jpeg,.png,.webp,.bmp,.gif,.tiff,.heic,.dcm,.dicom,.xls,.xlsx,.csv,.zip,.rar,.7z"
+                                        onChange={(e) => {
+                                          const file = e.target.files[0];
+                                          setAdditionalDocError('');
+                                          if (!file) return;
+                                          const extension = file.name.split('.').pop().toLowerCase();
+                                          if (!APPOINTMENT_FILE_EXTENSIONS.has(extension) || file.size > MAX_APPOINTMENT_FILE_SIZE) {
+                                            setAdditionalDocFile(null);
+                                            setAdditionalDocError('Choose a supported file under 25 MB.');
+                                            return;
+                                          }
+                                          setAdditionalDocFile(file);
+                                        }}
                             />
                             <button
                               className="btn btn-primary"
@@ -657,6 +737,7 @@ export default function PatientPortal({
                               {additionalDocUploading ? <><i className="fas fa-spinner fa-spin"></i> Submitting...</> : <><i className="fas fa-upload"></i> Submit Document</>}
                             </button>
                           </div>
+                          {additionalDocError && <p role="alert" style={{ color: '#b42318', fontSize: '13px', marginBottom: 0 }}>{additionalDocError}</p>}
                         </div>
                       )}
 
@@ -892,6 +973,11 @@ export default function PatientPortal({
                     cursor: 'pointer',
                   }}
                   onClick={() => document.getElementById('bookFileInput').click()}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    handleBookFilesSelected(event.dataTransfer.files);
+                  }}
                 >
                   <i className="fas fa-file-medical-alt" style={{ fontSize: '28px', color: '#078930', marginBottom: '6px' }}></i>
                   <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#334155' }}>
@@ -907,16 +993,17 @@ export default function PatientPortal({
                     id="bookFileInput"
                     multiple
                     style={{ display: 'none' }}
+                    onClick={(event) => event.stopPropagation()}
                     accept=".pdf,.doc,.docx,.txt,.rtf,.odt,.jpg,.jpeg,.png,.webp,.bmp,.gif,.tiff,.heic,.dcm,.dicom,.xls,.xlsx,.csv,.zip,.rar,.7z"
                     onChange={(e) => {
-                      if (e.target.files && e.target.files.length > 0) {
-                        const newFiles = Array.from(e.target.files);
-                        setBookFiles((prev) => [...prev, ...newFiles]);
-                      }
+                      handleBookFilesSelected(e.target.files);
+                      e.target.value = '';
                     }}
                   />
                 </div>
 
+                {bookFileError && <p role="alert" style={{ color: '#b42318', fontSize: '13px' }}>{bookFileError}</p>}
+                <p style={{ color: '#64748b', fontSize: '12px', marginTop: '6px' }}>Up to {MAX_APPOINTMENT_FILES} files, 25 MB each.</p>
                 {bookFiles.length > 0 && (
                   <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {bookFiles.map((file, idx) => {
@@ -943,7 +1030,10 @@ export default function PatientPortal({
                           </div>
                           <button
                             type="button"
-                            onClick={() => setBookFiles((prev) => prev.filter((_, i) => i !== idx))}
+                            onClick={() => {
+                              setBookFiles((prev) => prev.filter((_, i) => i !== idx));
+                              setBookFileError('');
+                            }}
                             style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px 8px', fontSize: '14px' }}
                             title="Remove file"
                           >
@@ -983,17 +1073,22 @@ export default function PatientPortal({
           <p style={{ fontSize: '14px', color: '#4a5a6e', marginBottom: '16px' }}>
             {isAm ? 'ሰነዶችዎን ለዘውዲቱ ሆስፒታል ያስረክቡ።' : 'Submit your medical documents (PDF, JPG, PNG) to Zewditu Memorial Hospital for verification.'}
           </p>
-          <div className="upload-area" onClick={() => document.getElementById('fileInputReact').click()}>
+          <div className="upload-area" onClick={() => document.getElementById('fileInputReact').click()}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              handleFileUpload(event.dataTransfer.files[0]);
+            }}>
             <i className="fas fa-cloud-upload-alt"></i>
             <p><strong>{isAm ? 'ጠቅ ያድርጉ ወይም ጎትተው ይጣሉ' : 'Click or drag & drop'}</strong></p>
             <span className="file-types">Supported: PDF, JPG, PNG (max 10MB)</span>
-            <input type="file" id="fileInputReact" style={{ display: 'none' }} accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e.target.files[0])} />
+            <input type="file" id="fileInputReact" style={{ display: 'none' }} accept=".pdf,.jpg,.jpeg,.png" onClick={(event) => event.stopPropagation()} onChange={(e) => { handleFileUpload(e.target.files[0]); e.target.value = ''; }} />
           </div>
           {uploadStatus && <div style={{ background: '#f0f5fa', padding: '12px', borderRadius: '10px', marginBottom: '14px', fontSize: '14px' }}>{uploadStatus}</div>}
           {fileProgress > 0 && <div className="progress-container"><div className="progress-bar-fill" style={{ width: `${fileProgress}%` }}></div></div>}
           <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
-            <button className="btn btn-success" onClick={submitFileVerification} disabled={!uploadedFile}><i className="fas fa-paper-plane"></i> {isAm ? 'ለማረጋገጫ አስረክብ' : 'Submit for Verification'}</button>
-            <button className="btn btn-outline" onClick={() => { setUploadedFile(null); setUploadStatus(''); setFileProgress(0); }}><i className="fas fa-times"></i> {isAm ? 'አጥራ' : 'Clear'}</button>
+            <button className="btn btn-success" onClick={submitFileVerification} disabled={!uploadedFile || fileUploading}><i className="fas fa-paper-plane"></i> {isAm ? 'ለማረጋገጫ አስረክብ' : 'Submit for Verification'}</button>
+            <button className="btn btn-outline" onClick={() => { setUploadedFile(null); setUploadStatus(''); setFileProgress(0); }} disabled={fileUploading}><i className="fas fa-times"></i> {isAm ? 'አጥራ' : 'Clear'}</button>
           </div>
         </div>
       )}

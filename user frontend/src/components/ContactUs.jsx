@@ -11,7 +11,14 @@ export default function ContactUs({ currentLang }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim() || !formData.message.trim() || !formData.contact.trim()) return;
+    if (!formData.name.trim() || !formData.message.trim() || !formData.contact.trim()) {
+      setError(isAm ? 'እባክዎ ሁሉንም አስፈላጊ መስኮች ይሙሉ።' : 'Please complete all required fields.');
+      return;
+    }
+    if (formData.name.trim().length > 120 || formData.subject.trim().length > 120 || formData.message.trim().length > 4800) {
+      setError(isAm ? 'እባክዎ የመልዕክት መስኮቹን የቁምፊ ገደብ ይቀንሱ።' : 'Please shorten the fields to their character limits.');
+      return;
+    }
     setLoading(true);
     setError('');
 
@@ -24,7 +31,7 @@ export default function ContactUs({ currentLang }) {
       });
       setSubmitted(true);
     } catch (err) {
-      setError(isAm ? 'መልዕክት መላክ አልተሳካም። እንደገና ይሞክሩ።' : 'Failed to send message. Please try again.');
+      setError(err.message || (isAm ? 'መልዕክት መላክ አልተሳካም። እንደገና ይሞክሩ።' : 'Failed to send message. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -107,11 +114,11 @@ export default function ContactUs({ currentLang }) {
               {error && <div style={{ color: '#da121a', background: '#fff5f5', padding: '10px 14px', borderRadius: '8px', fontSize: '14px' }}>{error}</div>}
               <div className="form-group" style={{ margin: 0 }}>
                 <label style={{ fontWeight: 600, fontSize: '14px', color: '#1e293b', marginBottom: '6px', display: 'block' }}>{isAm ? 'ሙሉ ስም *' : 'Full Name *'}</label>
-                <input type="text" placeholder={isAm ? 'ስምዎን ያስገቡ' : 'e.g. Abebe Bikila'} value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1px solid #d0dbe8', fontSize: '14.5px' }} />
+                <input type="text" maxLength={120} placeholder={isAm ? 'ስምዎን ያስገቡ' : 'e.g. Abebe Bikila'} value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1px solid #d0dbe8', fontSize: '14.5px' }} />
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label style={{ fontWeight: 600, fontSize: '14px', color: '#1e293b', marginBottom: '6px', display: 'block' }}>{isAm ? 'ኢሜይል *' : 'Email Address *'}</label>
-                <input type="email" placeholder="yourname@domain.com" value={formData.contact} onChange={(e) => setFormData({ ...formData, contact: e.target.value })} required style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1px solid #d0dbe8', fontSize: '14.5px' }} />
+                <input type="email" maxLength={254} placeholder="yourname@domain.com" value={formData.contact} onChange={(e) => setFormData({ ...formData, contact: e.target.value })} required style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1px solid #d0dbe8', fontSize: '14.5px' }} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
@@ -125,12 +132,12 @@ export default function ContactUs({ currentLang }) {
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label style={{ fontWeight: 600, fontSize: '14px', color: '#1e293b', marginBottom: '6px', display: 'block' }}>{isAm ? 'ርዕስ (አማራጭ)' : 'Subject (Optional)'}</label>
-                  <input type="text" placeholder={isAm ? 'አጭር ርዕስ' : 'Brief subject'} value={formData.subject} onChange={(e) => setFormData({ ...formData, subject: e.target.value })} style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1px solid #d0dbe8', fontSize: '14px' }} />
+                  <input type="text" maxLength={120} placeholder={isAm ? 'አጭር ርዕስ' : 'Brief subject'} value={formData.subject} onChange={(e) => setFormData({ ...formData, subject: e.target.value })} style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1px solid #d0dbe8', fontSize: '14px' }} />
                 </div>
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label style={{ fontWeight: 600, fontSize: '14px', color: '#1e293b', marginBottom: '6px', display: 'block' }}>{isAm ? 'መልዕክት *' : 'Detailed Message *'}</label>
-                <textarea rows="4" placeholder={isAm ? 'እንዴት ልንረዳዎ እንደምንችል ያብራሩ...' : 'How can we help you?'} value={formData.message} onChange={(e) => setFormData({ ...formData, message: e.target.value })} required style={{ width: '100%', padding: '12px 14px', borderRadius: '10px', border: '1px solid #d0dbe8', fontSize: '14.5px', lineHeight: '1.5' }}></textarea>
+                <textarea rows="4" maxLength={4800} placeholder={isAm ? 'እንዴት ልንረዳዎ እንደምንችል ያብራሩ...' : 'How can we help you?'} value={formData.message} onChange={(e) => setFormData({ ...formData, message: e.target.value })} required style={{ width: '100%', padding: '12px 14px', borderRadius: '10px', border: '1px solid #d0dbe8', fontSize: '14.5px', lineHeight: '1.5' }}></textarea>
               </div>
               <button type="submit" className="btn btn-primary" disabled={loading} style={{ padding: '13px 28px', fontWeight: 600, fontSize: '15px' }}>
                 <i className={`fas ${loading ? 'fa-spinner fa-spin' : 'fa-paper-plane'}`}></i>

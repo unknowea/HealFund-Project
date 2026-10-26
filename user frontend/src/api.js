@@ -126,7 +126,7 @@ export const getQueue = (params = {}) => {
 };
 
 export const updateQueueStatus = (token, status) =>
-  handle(fetch(`${BASE}/queue/${token}/status`, { method: 'PUT', headers: headers(), body: JSON.stringify({ status }) }));
+  handle(fetch(`${BASE}/queue/${encodeURIComponent(token)}/status`, { method: 'PUT', headers: headers(), body: JSON.stringify({ status }) }));
 
 // ─── FINANCIAL CASES ───────────────────────────────────────────────────────────
 export const getFinancialCases = () =>
@@ -146,13 +146,13 @@ export const sendMessage = (payload) =>
   handle(fetch(`${BASE}/messages`, { method: 'POST', headers: headers(), body: JSON.stringify(payload) }));
 
 export const updateMessageStatus = (id, status) =>
-  handle(fetch(`${BASE}/messages/${id}/status`, { method: 'PUT', headers: headers(), body: JSON.stringify({ status }) }));
+  handle(fetch(`${BASE}/messages/${encodeURIComponent(id)}/status`, { method: 'PUT', headers: headers(), body: JSON.stringify({ status }) }));
 
 export const replyToMessage = (id, replyText) =>
-  handle(fetch(`${BASE}/messages/${id}/reply`, { method: 'POST', headers: headers(), body: JSON.stringify({ replyText }) }));
+  handle(fetch(`${BASE}/messages/${encodeURIComponent(id)}/reply`, { method: 'POST', headers: headers(), body: JSON.stringify({ replyText }) }));
 
 export const deleteMessage = (id) =>
-  handle(fetch(`${BASE}/messages/${id}`, { method: 'DELETE', headers: headers() }));
+  handle(fetch(`${BASE}/messages/${encodeURIComponent(id)}`, { method: 'DELETE', headers: headers() }));
 
 // ─── FILE UPLOAD ───────────────────────────────────────────────────────────────
 export const uploadFile = (file) => {

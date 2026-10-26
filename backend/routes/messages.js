@@ -20,18 +20,27 @@ router.get('/', protect, requireRole('admin', 'hospital_officer'), async (req, r
 router.post('/', messageLimiter, async (req, res) => {
   try {
     const { name, contact, category, message, content, userName, userEmail, patientName, patientEmail } = req.body;
-    const authorName = name || userName || patientName || 'Patient';
-    const authorMsg = message || content;
-    const authorContact = contact || userEmail || patientEmail || '';
+    const authorName = name ?? userName ?? patientName ?? 'Patient';
+    const authorMsg = message ?? content;
+    const authorContact = contact ?? userEmail ?? patientEmail ?? '';
 
-    if (!authorName || !authorMsg)
+    if (
+      typeof authorName !== 'string' || !authorName.trim() || authorName.trim().length > 120 ||
+      typeof authorMsg !== 'string' || !authorMsg.trim() || authorMsg.trim().length > 5000 ||
+      typeof authorContact !== 'string' || authorContact.length > 254
+    ) {
       return res.status(400).json({ success: false, message: 'Name and message are required' });
+    }
+    const allowedCategories = ['General Inquiry', 'Medical File Verification', 'Financial Assistance', 'Community Agent'];
+    if (category !== undefined && !allowedCategories.includes(category)) {
+      return res.status(400).json({ success: false, message: 'Select a valid message category' });
+    }
 
     const newMessage = await Message.create({
-      name: authorName,
-      contact: authorContact,
+      name: authorName.trim(),
+      contact: authorContact.trim(),
       category: category || 'General Inquiry',
-      message: authorMsg,
+      message: authorMsg.trim(),
     });
     res.status(201).json({
       success: true,

@@ -9,6 +9,20 @@ import { authLimiter, otpLimiter } from '../middleware/rateLimit.js';
 
 const router = express.Router();
 const ownerEmail = (process.env.OWNER_EMAIL || 'healfund2006@gmail.com').trim().toLowerCase();
+const isValidEmail = (value) => typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+const isStrongPassword = (value) =>
+  typeof value === 'string' &&
+  value.length >= 8 &&
+  value.length <= 128 &&
+  /[a-zA-Z]/.test(value) &&
+  /[0-9]/.test(value) &&
+  /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(value);
+const requireObjectBody = (req, res, next) => {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ success: false, message: 'A valid request body is required' });
+  }
+  next();
+};
 
 const generateToken = (user) =>
   jwt.sign(
@@ -20,18 +34,17 @@ const generateToken = (user) =>
 // ─── OTP ROUTES ────────────────────────────────────────────────────────────────
 
 // POST /api/auth/send-otp
-router.post('/send-otp', otpLimiter, async (req, res) => {
+router.post('/send-otp', otpLimiter, requireObjectBody, async (req, res) => {
   try {
     const { email, purpose = 'signup' } = req.body;
-    if (!email) {
+    if (!isValidEmail(email)) {
       return res.status(400).json({ success: false, message: 'Email address is required' });
     }
-
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(normalizedEmail)) {
-      return res.status(400).json({ success: false, message: 'Invalid email address format' });
+    if (!['signup', 'reset-password'].includes(purpose)) {
+      return res.status(400).json({ success: false, message: 'Select a valid verification purpose' });
     }
+
+    const normalizedEmail = email.trim().toLowerCase();
 
     // If signup, check if email is already registered
     if (purpose === 'signup') {
@@ -81,15 +94,18 @@ router.post('/send-otp', otpLimiter, async (req, res) => {
 });
 
 // POST /api/auth/verify-otp
-router.post('/verify-otp', otpLimiter, async (req, res) => {
+router.post('/verify-otp', otpLimiter, requireObjectBody, async (req, res) => {
   try {
     const { email, otp, purpose = 'signup' } = req.body;
-    if (!email || !otp) {
+    if (!isValidEmail(email) || typeof otp !== 'string' || !/^\d{6}$/.test(otp.trim())) {
       return res.status(400).json({ success: false, message: 'Email and OTP are required' });
     }
+    if (!['signup', 'reset-password'].includes(purpose)) {
+      return res.status(400).json({ success: false, message: 'Select a valid verification purpose' });
+    }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const cleanOtp = String(otp).trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const cleanOtp = otp.trim();
 
     const otpRecord = await Otp.findOne({
       email: normalizedEmail,
@@ -120,24 +136,25 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
 });
 
 // POST /api/auth/reset-password
-router.post('/reset-password', otpLimiter, async (req, res) => {
+router.post('/reset-password', otpLimiter, requireObjectBody, async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
-    if (!email || !otp || !newPassword) {
+    if (!isValidEmail(email) || typeof otp !== 'string' || !/^\d{6}$/.test(otp.trim()) || typeof newPassword !== 'string') {
       return res.status(400).json({ success: false, message: 'Email, OTP, and new password are required' });
     }
 
-    if (newPassword.length < 8) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters long' });
+    if (!isStrongPassword(newPassword)) {
+      return res.status(400).json({ success: false, message: 'Password must be 8 to 128 characters and include a letter, number, and symbol' });
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const cleanOtp = String(otp).trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const cleanOtp = otp.trim();
 
     const otpRecord = await Otp.findOne({
       email: normalizedEmail,
       otp: cleanOtp,
       purpose: 'reset-password',
+      verified: true,
       expiresAt: { $gt: new Date() },
     });
 
@@ -164,13 +181,13 @@ router.post('/reset-password', otpLimiter, async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', authLimiter, async (req, res) => {
+router.post('/login', authLimiter, requireObjectBody, async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ success: false, message: 'Email and password required' });
+    if (!isValidEmail(email) || typeof password !== 'string' || !password || password.length > 128)
+      return res.status(400).json({ success: false, message: 'A valid email and password are required' });
 
-    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
     const user = await User.findOne({ email: normalizedEmail });
     if (!user)
       return res.status(401).json({ success: false, message: 'Email and password are incorrect' });
@@ -180,6 +197,8 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(403).json({ success: false, message: 'This account has been removed. Contact support.' });
     if (user.status === 'Suspended')
       return res.status(403).json({ success: false, message: 'This account has been suspended. Contact support.' });
+    if (user.role !== 'patient')
+      return res.status(403).json({ success: false, message: 'Use the staff sign-in portal for this account' });
 
     const { password: _, ...userWithoutPass } = user.toObject();
     return res.json({ success: true, token: generateToken(user), user: userWithoutPass });
@@ -189,14 +208,14 @@ router.post('/login', authLimiter, async (req, res) => {
 });
 
 // POST /api/auth/admin-login
-router.post('/admin-login', authLimiter, async (req, res) => {
+router.post('/admin-login', authLimiter, requireObjectBody, async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and password required' });
+    if (!isValidEmail(email) || typeof password !== 'string' || !password || password.length > 128) {
+      return res.status(400).json({ success: false, message: 'A valid email and password are required' });
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(401).json({ success: false, message: 'Email and password are incorrect' });
@@ -226,14 +245,14 @@ router.post('/admin-login', authLimiter, async (req, res) => {
 });
 
 // PUT /api/auth/change-password — change the signed-in user's password
-router.put('/change-password', protect, authLimiter, async (req, res) => {
+router.put('/change-password', protect, authLimiter, requireObjectBody, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
+    if (typeof currentPassword !== 'string' || !currentPassword || typeof newPassword !== 'string' || !newPassword) {
       return res.status(400).json({ success: false, message: 'Current and new passwords are required' });
     }
-    if (typeof newPassword !== 'string' || newPassword.length < 8) {
-      return res.status(400).json({ success: false, message: 'New password must be at least 8 characters long' });
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      return res.status(400).json({ success: false, message: 'New password must be between 8 and 128 characters long' });
     }
     if (currentPassword === newPassword) {
       return res.status(400).json({ success: false, message: 'Choose a new password different from your current password' });
@@ -276,16 +295,28 @@ router.delete('/account', protect, authLimiter, async (req, res) => {
 });
 
 // POST /api/auth/signup
-router.post('/signup', otpLimiter, async (req, res) => {
+router.post('/signup', otpLimiter, requireObjectBody, async (req, res) => {
   try {
     const { name, email, password, age, gender, location, otp } = req.body;
-    if (!name || !email || !password || !age || !gender || !location)
+    if (
+      typeof name !== 'string' || !name.trim() || name.trim().length > 120 ||
+      !isValidEmail(email) ||
+      !isStrongPassword(password) ||
+      age === undefined || age === '' ||
+      typeof location !== 'string' || !location.trim() || location.trim().length > 200 ||
+      typeof otp !== 'string' || !/^\d{6}$/.test(otp.trim())
+    ) {
       return res.status(400).json({ success: false, message: 'Please fill in all fields' });
+    }
     if (!['Male', 'Female'].includes(gender)) {
       return res.status(400).json({ success: false, message: 'Select Male or Female for gender' });
     }
+    const parsedAge = Number(age);
+    if (!Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120) {
+      return res.status(400).json({ success: false, message: 'Age must be a whole number between 1 and 120' });
+    }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
 
     const exists = await User.findOne({ email: normalizedEmail });
     if (exists && !exists.deletedAt)
@@ -314,12 +345,12 @@ router.post('/signup', otpLimiter, async (req, res) => {
     }
 
     const user = await User.create({
-      name,
+      name: name.trim(),
       email: normalizedEmail,
       password,
-      age: parseInt(age),
+      age: parsedAge,
       gender,
-      location,
+      location: location.trim(),
       role: 'patient',
     });
 
@@ -345,29 +376,61 @@ router.get('/profile', protect, async (req, res) => {
 });
 
 // PUT /api/auth/profile — update own profile
-router.put('/profile', protect, async (req, res) => {
+router.put('/profile', protect, requireObjectBody, async (req, res) => {
   try {
     const { name, age, gender, location, profilePhoto } = req.body;
-    if (typeof profilePhoto === 'string' && profilePhoto.length > 0) {
-      const isAllowedImage = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(profilePhoto);
-      if (!isAllowedImage || profilePhoto.length > 3 * 1024 * 1024) {
-        return res.status(400).json({ success: false, message: 'Profile photo must be a PNG, JPEG, or WebP image under 2 MB' });
+    const update = {};
+    const unset = {};
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim() || name.trim().length > 120) {
+        return res.status(400).json({ success: false, message: 'Name is required and must be 120 characters or fewer' });
+      }
+      update.name = name.trim();
+    }
+    if (age !== undefined) {
+      if (age === '') {
+        unset.age = 1;
+      } else {
+        const parsedAge = Number(age);
+        if (!Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120) {
+          return res.status(400).json({ success: false, message: 'Age must be a whole number between 1 and 120' });
+        }
+        update.age = parsedAge;
       }
     }
-
-    const update = {};
-    if (name) update.name = name;
-    if (age) update.age = parseInt(age);
-    if (gender) {
+    if (gender !== undefined) {
       if (!['Male', 'Female'].includes(gender)) {
         return res.status(400).json({ success: false, message: 'Select Male or Female for gender' });
       }
       update.gender = gender;
     }
-    if (location) update.location = location;
-    if (profilePhoto !== undefined) update.profilePhoto = profilePhoto;
+    if (location !== undefined) {
+      if (typeof location !== 'string' || location.trim().length > 200) {
+        return res.status(400).json({ success: false, message: 'Location must be 200 characters or fewer' });
+      }
+      update.location = location.trim();
+    }
+    if (profilePhoto !== undefined) {
+      if (typeof profilePhoto !== 'string') {
+        return res.status(400).json({ success: false, message: 'Profile photo must be an image string' });
+      }
+      if (profilePhoto) {
+        const imageMatch = /^data:image\/(?:jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(profilePhoto);
+        if (!imageMatch || Buffer.byteLength(imageMatch[1], 'base64') > 2 * 1024 * 1024) {
+          return res.status(400).json({ success: false, message: 'Profile photo must be a PNG, JPEG, or WebP image under 2 MB' });
+        }
+      }
+      update.profilePhoto = profilePhoto;
+    }
+    if (!Object.keys(update).length && !Object.keys(unset).length) {
+      return res.status(400).json({ success: false, message: 'Provide at least one profile field to update' });
+    }
 
-    const user = await User.findByIdAndUpdate(req.user.id, { $set: update }, { new: true, runValidators: true }).select('-password');
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { ...(Object.keys(update).length ? { $set: update } : {}), ...(Object.keys(unset).length ? { $unset: unset } : {}) },
+      { new: true, runValidators: true }
+    ).select('-password');
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, user });
   } catch (err) {

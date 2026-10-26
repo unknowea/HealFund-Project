@@ -4,6 +4,7 @@ import { getQueue } from '../api.js';
 export default function QueuePortal({ currentLang, currentUser }) {
   const [queueItems, setQueueItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchToken, setSearchToken] = useState('');
   const [activeQueueToken, setActiveQueueToken] = useState('');
   const [selectedDept, setSelectedDept] = useState('all');
@@ -14,23 +15,33 @@ export default function QueuePortal({ currentLang, currentUser }) {
 
   const fetchQueue = async () => {
     setLoading(true);
+    setError('');
     try {
       const data = await getQueue();
-      setQueueItems(data.queue || []);
+      if (!data.success || !Array.isArray(data.queue)) {
+        throw new Error(data.message || 'Could not load queue information.');
+      }
+      const items = data.queue;
+      setQueueItems(items);
+      setActiveQueueToken((token) => items.some((item) => item.token === token) ? token : items[0]?.token || '');
     } catch (err) {
       console.error('Fetch queue error:', err.message);
+      setError(err.message || 'Could not load queue information.');
     } finally {
       setLoading(false);
     }
   };
 
   const filteredQueue = queueItems.filter((q) => {
-    if (searchToken && !q.token.toLowerCase().includes(searchToken.toLowerCase()) && !q.patientName.toLowerCase().includes(searchToken.toLowerCase())) return false;
-    if (selectedDept !== 'all' && !q.department.toLowerCase().includes(selectedDept.toLowerCase())) return false;
+    if (searchToken && !(q.token || '').toLowerCase().includes(searchToken.toLowerCase()) && !(q.patientName || '').toLowerCase().includes(searchToken.toLowerCase())) return false;
+    if (selectedDept !== 'all' && !(q.department || '').toLowerCase().includes(selectedDept.toLowerCase())) return false;
     return true;
   });
 
   const activeTicket = queueItems.find((q) => q.token === activeQueueToken) || queueItems[0];
+  const currentTicket = queueItems.find((item) => item.status === 'In Progress')
+    || queueItems.find((item) => ['Waiting', 'Scheduled'].includes(item.status))
+    || (activeTicket?.status !== 'Cancelled' ? activeTicket : null);
 
   return (
     <div>
@@ -46,15 +57,21 @@ export default function QueuePortal({ currentLang, currentUser }) {
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
             <div style={{ background: 'rgba(255,255,255,0.15)', padding: '12px 20px', borderRadius: '14px', textAlign: 'center' }}>
-              <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Now Serving</span>
-              <h1 style={{ fontSize: '32px', color: '#fff', margin: 0 }}>{queueItems[0]?.token || '—'}</h1>
+              <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Your Queue</span>
+              <h1 style={{ fontSize: '32px', color: '#fff', margin: 0 }}>{currentTicket?.token || '—'}</h1>
             </div>
-            <button className="btn btn-outline" onClick={fetchQueue} style={{ color: '#fff', borderColor: '#fff', alignSelf: 'center' }}>
+            <button className="btn btn-outline" onClick={fetchQueue} aria-label="Refresh queue" style={{ color: '#fff', borderColor: '#fff', alignSelf: 'center' }}>
               <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i>
             </button>
           </div>
         </div>
       </div>
+
+      {error && (
+        <div role="alert" style={{ background: '#fff1f0', color: '#a8071a', border: '1px solid #ffa39e', padding: '12px 16px', borderRadius: '8px', margin: '16px 0' }}>
+          {error} <button type="button" onClick={fetchQueue}>Retry</button>
+        </div>
+      )}
 
       <div className="grid-2">
         {/* Active Ticket */}
@@ -71,9 +88,9 @@ export default function QueuePortal({ currentLang, currentUser }) {
                 <h3 style={{ color: '#0f3b5e', fontSize: '20px' }}>{activeTicket.patientName} ({activeTicket.patientId})</h3>
               </div>
               <div className="info-row"><span className="label"><i className="fas fa-hospital-alt"></i> Clinic / Department:</span><span className="value"><strong>{activeTicket.department}</strong></span></div>
-              <div className="info-row"><span className="label"><i className="fas fa-door-open"></i> Assigned Room:</span><span className="value"><strong style={{ color: '#078930' }}>{activeTicket.roomNumber || 'Room 101'}</strong></span></div>
-              <div className="info-row"><span className="label"><i className="fas fa-user-md"></i> Assigned Doctor:</span><span className="value"><strong>{activeTicket.assignedDoctor}</strong></span></div>
-              <div className="info-row"><span className="label"><i className="fas fa-clock"></i> Consultation Slot:</span><span className="value">{activeTicket.estimatedTime ? new Date(activeTicket.estimatedTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—'} <small style={{ color: '#078930' }}>(~10 min)</small></span></div>
+              <div className="info-row"><span className="label"><i className="fas fa-door-open"></i> Assigned Room:</span><span className="value"><strong style={{ color: '#078930' }}>{activeTicket.roomNumber || '—'}</strong></span></div>
+              <div className="info-row"><span className="label"><i className="fas fa-user-md"></i> Assigned Doctor:</span><span className="value"><strong>{activeTicket.assignedDoctor || '—'}</strong></span></div>
+              <div className="info-row"><span className="label"><i className="fas fa-clock"></i> Consultation Slot:</span><span className="value">{activeTicket.estimatedTime ? new Date(activeTicket.estimatedTime).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</span></div>
               <div className="info-row">
                 <span className="label"><i className="fas fa-exclamation-circle"></i> Priority:</span>
                 <span className="value" style={{ color: activeTicket.urgency === 'Emergency' || activeTicket.urgency === 'High' ? '#da121a' : '#078930', fontWeight: 700 }}>{activeTicket.urgency || 'Routine'}</span>
@@ -85,7 +102,7 @@ export default function QueuePortal({ currentLang, currentUser }) {
                 </ul>
               </div>
             </div>
-          ) : (
+          ) : error ? null : (
             <div className="card"><p style={{ color: '#7a8a9e' }}>{loading ? 'Loading queue...' : 'No queue items found.'}</p></div>
           )}
         </div>
@@ -94,7 +111,7 @@ export default function QueuePortal({ currentLang, currentUser }) {
         <div className="card">
           <div className="card-header">
             <h3><i className="fas fa-stream"></i> Live Patient Queue</h3>
-            <span className="badge" style={{ background: '#078930', padding: '4px 12px' }}>{filteredQueue.length} Waiting</span>
+            <span className="badge" style={{ background: '#078930', padding: '4px 12px' }}>{filteredQueue.length} Tickets</span>
           </div>
           <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
             <input type="text" placeholder="Search by Token or Name..." value={searchToken} onChange={(e) => setSearchToken(e.target.value)} style={{ flex: 1, minWidth: '200px', padding: '8px 14px', borderRadius: '8px', border: '1px solid #d0dbe8' }} />

@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
-import { protect } from '../middleware/auth.js';
+import { protect, requireRole } from '../middleware/auth.js';
 import User from '../models/User.js';
 import PatientDocument from '../models/PatientDocument.js';
 
@@ -36,20 +36,38 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
 });
 
-// POST /api/files/upload — protected
-router.post('/upload', protect, upload.single('medicalFile'), async (req, res) => {
+const handleUpload = (req, res, next) => {
+  upload.single('medicalFile')(req, res, async (err) => {
+    if (!err) return next();
+    if (req.file) {
+      try {
+        await fs.promises.unlink(path.join(uploadDir, req.file.filename));
+      } catch (cleanupError) {
+        if (cleanupError.code !== 'ENOENT') {
+          console.error('Could not clean up rejected patient upload:', cleanupError);
+        }
+      }
+    }
+    return res.status(400).json({ success: false, message: err.message });
+  });
+};
+
+// POST /api/files/upload — patient-only document upload
+router.post('/upload', protect, requireRole('patient'), handleUpload, async (req, res) => {
   if (!req.file)
     return res.status(400).json({ success: false, message: 'No file uploaded' });
 
   try {
-    // Look up the uploading user to get their name and patientId
     const user = await User.findById(req.user.id).select('name patientId');
+    if (!user?.patientId) {
+      await fs.promises.unlink(path.join(uploadDir, req.file.filename));
+      return res.status(401).json({ success: false, message: 'Patient account is not available' });
+    }
     const ext = path.extname(req.file.originalname).replace('.', '').toLowerCase();
 
-    // Save a PatientDocument record so the admin can see and download this file
-    await PatientDocument.create({
-      patientId: user?.patientId || req.user.id,
-      patientName: user?.name || req.user.email,
+    const document = await PatientDocument.create({
+      patientId: user.patientId,
+      patientName: user.name,
       originalName: req.file.originalname,
       filename: req.file.filename,
       size: (req.file.size / (1024 * 1024)).toFixed(2) + ' MB',
@@ -70,9 +88,15 @@ router.post('/upload', protect, upload.single('medicalFile'), async (req, res) =
       },
     });
   } catch (err) {
-    // Clean up the uploaded file if DB save failed
-    fs.unlink(path.join(uploadDir, req.file.filename), () => {});
-    res.status(500).json({ success: false, message: err.message });
+    try {
+      await fs.promises.unlink(path.join(uploadDir, req.file.filename));
+    } catch (cleanupError) {
+      if (cleanupError.code !== 'ENOENT') {
+        console.error('Could not clean up failed patient upload:', cleanupError);
+      }
+    }
+    console.error('Could not save patient document:', err);
+    res.status(500).json({ success: false, message: 'Could not save the uploaded document' });
   }
 });
 
