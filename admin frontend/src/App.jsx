@@ -92,6 +92,7 @@ export default function App() {
               <p>Lideta / Kirkos Sub-City, Addis Ababa</p>
               <p>HealFundET@gmail.com</p>
               <p>+251921198350</p>
+              <a href="https://www.linkedin.com/in/heal-fund" target="_blank" rel="noopener noreferrer" aria-label="HealFund on LinkedIn">LinkedIn</a>
               <p>Emergency Triage: 24/7</p>
             </div>
           </div>

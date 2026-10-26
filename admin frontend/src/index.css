@@ -22,13 +22,13 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 38px;
-  padding: 9px 16px;
+  min-height: 42px;
+  padding: 10px 18px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 12px;
   font: inherit;
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1.2;
   text-decoration: none;
   cursor: pointer;
@@ -138,13 +138,14 @@ body {
 .module-tab {
   background: transparent;
   border: none;
-  padding: 7px 14px;
-  border-radius: 30px;
+  min-height: 38px;
+  padding: 8px 15px;
+  border-radius: 22px;
   font-weight: 600;
   font-size: 13.5px;
   cursor: pointer;
   color: #4a5a6e;
-  transition: all 0.2s ease;
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -153,6 +154,16 @@ body {
 .module-tab:hover {
   background: #d4f0e0;
   color: #078930;
+}
+
+.module-tab:active {
+  transform: scale(0.98);
+}
+
+.module-tab:focus-visible,
+.subnav-links button:focus-visible {
+  outline: 3px solid rgba(7, 137, 48, 0.22);
+  outline-offset: 2px;
 }
 
 .module-tab.active {
@@ -172,13 +183,14 @@ body {
 .subnav-links button {
   background: #ffffff;
   border: 1px solid #c0e0d0;
+  min-height: 40px;
   padding: 8px 16px;
-  border-radius: 30px;
+  border-radius: 12px;
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
   color: #4a5a6e;
-  transition: 0.2s;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -186,7 +198,12 @@ body {
 
 .subnav-links button:hover {
   background: #e8f4ec;
+  border-color: #78b493;
   color: #078930;
+}
+
+.subnav-links button:active {
+  transform: scale(0.98);
 }
 
 .subnav-links button.active {
@@ -799,6 +816,8 @@ body {
 .footer-note p { margin: 0 0 8px; line-height: 1.5; }
 .footer-note button { display: block; padding: 0; margin: 0 0 9px; border: 0; background: none; color: #d4f0e0; font: inherit; cursor: pointer; text-align: left; }
 .footer-note button:hover { color: #fff; }
+.footer-note a { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px; color: #d4f0e0; font-weight: 600; text-decoration: none; }
+.footer-note a:hover { color: #fff; text-decoration: underline; }
 .footer-bottom { max-width: 1180px; margin: 26px auto 0; padding-top: 18px; border-top: 1px solid #18764f; text-align: center; color: #b8e6c9; font-size: 13px; }
 
 @media (max-width: 900px) {

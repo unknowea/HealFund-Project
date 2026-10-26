@@ -306,7 +306,10 @@ router.post('/:id/donate', async (req, res) => {
     }
 
     const [firstName, ...lastNameParts] = donorName.trim().split(/\s+/);
-    const returnUrl = new URL('/', process.env.CHAPA_RETURN_URL || process.env.USER_FRONTEND_URL || 'http://localhost:3000');
+    const defaultReturnUrl = process.env.NODE_ENV === 'production'
+      ? 'https://healfund.onrender.com'
+      : 'http://localhost:3000';
+    const returnUrl = new URL('/', process.env.CHAPA_RETURN_URL || process.env.USER_FRONTEND_URL || defaultReturnUrl);
     returnUrl.searchParams.set('payment', 'return');
     returnUrl.searchParams.set('tx_ref', txRef);
     const callbackUrl = process.env.CHAPA_CALLBACK_URL || (process.env.BACKEND_PUBLIC_URL

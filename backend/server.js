@@ -22,6 +22,8 @@ const allowedOrigins = [
   process.env.ADMIN_FRONTEND_URL,
   process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
   process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`,
+  'https://healfund.onrender.com',
+  'https://healfund-admin-portal.onrender.com',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3000',
@@ -104,6 +106,10 @@ app.use((err, req, res, next) => {
 });
 
 await connectDB();
+
+if (!process.env.CHAPA_SECRET_KEY) {
+  console.warn('Chapa donations are disabled because CHAPA_SECRET_KEY is not configured.');
+}
 
 app.listen(PORT, () => {
   console.log(`HealFund backend running on http://localhost:${PORT}`);

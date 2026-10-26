@@ -19,6 +19,7 @@ const API = (path, opts = {}) => {
     return response;
   });
 };
+const OWNER_EMAIL = 'healfund2006@gmail.com';
 
 const openDocumentFile = async (documentId, action = 'view') => {
   const fileWindow = window.open('', '_blank');
@@ -2335,7 +2336,7 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
         {activeTab === 'users'        && <UsersTab
           canDeleteUsers={adminUser.role === 'admin'}
           currentUserEmail={adminUser.email}
-          isOwner={adminUser.role === 'admin' && adminUser.email?.toLowerCase() === 'healfund2006@gmail.com'}
+          isOwner={adminUser.role === 'admin' && adminUser.email?.trim().toLowerCase() === OWNER_EMAIL}
           isHospitalOfficer={adminUser.role === 'hospital_officer'}
         />}
         {activeTab === 'financial'    && <FinancialTab canDeleteCases={adminUser.role === 'admin'} />}

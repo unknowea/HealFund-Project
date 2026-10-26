@@ -65,6 +65,13 @@ export default function ContactUs({ currentLang }) {
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#e8f0fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0a66c2', flexShrink: 0, fontSize: '18px' }}><i className="fab fa-linkedin-in"></i></div>
+                <div>
+                  <strong style={{ color: '#0f3b5e', fontSize: '14px', display: 'block', marginBottom: '2px' }}>{isAm ? 'LinkedIn ላይ ይከተሉን' : 'Connect on LinkedIn'}</strong>
+                  <a href="https://www.linkedin.com/in/heal-fund" target="_blank" rel="noopener noreferrer" style={{ color: '#0a66c2', fontSize: '14px', fontWeight: 600, textDecoration: 'none' }}>linkedin.com/in/heal-fund</a>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
                 <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#fef3e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e67e22', flexShrink: 0, fontSize: '18px' }}><i className="fas fa-clock"></i></div>
                 <div>
                   <strong style={{ color: '#0f3b5e', fontSize: '14px', display: 'block', marginBottom: '2px' }}>{isAm ? 'የስራ ሰዓት' : 'Operational Hours'}</strong>

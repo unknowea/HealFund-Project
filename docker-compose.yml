@@ -28,7 +28,8 @@ services:
       EMAIL_USER: ${EMAIL_USER:-}
       EMAIL_PASS: ${EMAIL_PASS:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
-      USER_FRONTEND_URL: http://localhost:3000
+      USER_FRONTEND_URL: ${USER_FRONTEND_URL:-http://localhost:3000}
+      CHAPA_RETURN_URL: ${CHAPA_RETURN_URL:-}
       ADMIN_FRONTEND_URL: http://localhost:3001
     ports:
       - "5000:5000"
