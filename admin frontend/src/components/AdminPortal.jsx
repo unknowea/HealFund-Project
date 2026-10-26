@@ -102,9 +102,12 @@ function AdminLogin({ onLoginSuccess }) {
       });
       const data = await res.json();
       if (data.success) {
-        if (data.user?.role === 'patient') {
+        if (!data.token || !data.user) {
+          setError('The server returned an incomplete sign-in response.');
+          return;
+        }
+        if (!['admin', 'hospital_officer'].includes(data.user.role)) {
           setError('Access denied. Staff credentials required.');
-          setLoading(false);
           return;
         }
         localStorage.setItem('healfund_token', data.token);
@@ -2336,7 +2339,7 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
         {activeTab === 'users'        && <UsersTab
           canDeleteUsers={adminUser.role === 'admin'}
           currentUserEmail={adminUser.email}
-          isOwner={adminUser.role === 'admin' && adminUser.email?.trim().toLowerCase() === OWNER_EMAIL}
+          isOwner={adminUser.role === 'admin' && (adminUser.isOwner === true || adminUser.email?.trim().toLowerCase() === OWNER_EMAIL)}
           isHospitalOfficer={adminUser.role === 'hospital_officer'}
         />}
         {activeTab === 'financial'    && <FinancialTab canDeleteCases={adminUser.role === 'admin'} />}

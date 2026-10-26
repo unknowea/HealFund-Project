@@ -61,6 +61,16 @@ const serializeDocument = (doc) => ({
   reviewedAt: doc.reviewedAt || null,
 });
 
+const allocateQueueToken = async () => {
+  let sequence = (await Queue.countDocuments()) + 25;
+  let token = `C-${String(sequence).padStart(3, '0')}`;
+  while (await Queue.exists({ token })) {
+    sequence += 1;
+    token = `C-${String(sequence).padStart(3, '0')}`;
+  }
+  return token;
+};
+
 // GET /api/admin/stats
 router.get('/stats', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
@@ -125,6 +135,30 @@ router.get('/documents', protect, requireRole('admin', 'hospital_officer'), asyn
 router.put('/documents/:id/verify', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
     const { status, adminNote, addToWaitingList, department, urgency, assignedDoctor } = req.body;
+    if (!['Verified', 'Rejected', 'Pending Verification'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Status must be Verified, Rejected, or Pending Verification' });
+    }
+    if (typeof adminNote !== 'undefined' && typeof adminNote !== 'string') {
+      return res.status(400).json({ success: false, message: 'Admin note must be text' });
+    }
+    if (adminNote && adminNote.length > 2000) {
+      return res.status(400).json({ success: false, message: 'Admin note must be 2,000 characters or fewer' });
+    }
+    if (typeof department !== 'undefined' && (typeof department !== 'string' || !department.trim() || department.trim().length > 120)) {
+      return res.status(400).json({ success: false, message: 'Department must be 1 to 120 characters' });
+    }
+    if (typeof assignedDoctor !== 'undefined' && (typeof assignedDoctor !== 'string' || !assignedDoctor.trim() || assignedDoctor.trim().length > 120)) {
+      return res.status(400).json({ success: false, message: 'Assigned doctor must be 1 to 120 characters' });
+    }
+    if (typeof addToWaitingList !== 'undefined' && typeof addToWaitingList !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'Waiting-list option must be true or false' });
+    }
+    if (status === 'Rejected' && !adminNote?.trim()) {
+      return res.status(400).json({ success: false, message: 'A rejection reason is required' });
+    }
+    if (urgency && !['Emergency', 'High', 'Medium', 'Low', 'Routine'].includes(urgency)) {
+      return res.status(400).json({ success: false, message: 'Invalid urgency level' });
+    }
     const doc = await PatientDocument.findOne({ documentId: req.params.id });
     if (!doc) return res.status(404).json({ success: false, message: 'Document not found' });
 
@@ -144,10 +178,9 @@ router.put('/documents/:id/verify', protect, requireRole('admin', 'hospital_offi
       let queueEntry = await Queue.findOne({ patientId: doc.patientId });
 
       if (!queueEntry) {
-        const queueCount = await Queue.countDocuments();
-        generatedToken = `C-${String(queueCount + 25).padStart(3, '0')}`;
-        const targetDept = department || 'General Medical Clinic (Room 102)';
-        const targetDoc = assignedDoctor || 'Dr. M. Worku';
+        generatedToken = await allocateQueueToken();
+        const targetDept = department?.trim() || 'General Medical Clinic (Room 102)';
+        const targetDoc = assignedDoctor?.trim() || 'Dr. M. Worku';
         const targetUrgency = urgency || 'Medium';
 
         queueEntry = await Queue.create({
@@ -165,10 +198,11 @@ router.put('/documents/:id/verify', protect, requireRole('admin', 'hospital_offi
         generatedToken = queueEntry.token;
         queueEntry.status = 'Waiting';
         if (department) {
-          queueEntry.department = department.includes('Clinic') ? department : `${department} Clinic`;
+          const targetDept = department.trim();
+          queueEntry.department = targetDept.includes('Clinic') ? targetDept : `${targetDept} Clinic`;
         }
         if (urgency) queueEntry.urgency = urgency;
-        if (assignedDoctor) queueEntry.assignedDoctor = assignedDoctor;
+        if (assignedDoctor) queueEntry.assignedDoctor = assignedDoctor.trim();
         await queueEntry.save();
       }
 
@@ -189,33 +223,26 @@ router.put('/documents/:id/verify', protect, requireRole('admin', 'hospital_offi
 // GET /api/admin/documents/:id/file
 router.get('/documents/:id/file', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
-    console.log('🔍 Document file request:', req.params.id);
-    
     let doc = await PatientDocument.findOne({
       $or: [{ documentId: req.params.id }, { filename: req.params.id }],
     });
-    console.log('📋 Document found:', doc ? doc.documentId : 'NOT FOUND');
-    
     if (!doc && mongoose.Types.ObjectId.isValid(req.params.id)) {
       doc = await PatientDocument.findById(req.params.id);
-      console.log('📋 Document found by ID:', doc ? doc.documentId : 'NOT FOUND');
     }
     if (!doc) return res.status(404).json({ success: false, message: 'Document not found in database' });
 
     const filePath = getUploadPath(doc.filename);
-    console.log('📁 Checking file path:', filePath);
-    console.log('✅ File exists:', fs.existsSync(filePath));
-    
     if (!filePath || !fs.existsSync(filePath)) {
       return res.status(404).json({ success: false, message: 'File not found on server. Please re-upload.' });
     }
+    res.set('X-Content-Type-Options', 'nosniff');
     if (req.query.action === 'view') {
       res.sendFile(filePath, { headers: { 'Content-Disposition': `inline; filename="${doc.originalName || doc.filename}"` } });
     } else {
       res.download(filePath, doc.originalName || doc.filename);
     }
   } catch (err) {
-    console.error('❌ Error in document file route:', err);
+    console.error('Admin document file request failed:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
@@ -236,7 +263,8 @@ router.delete('/documents/:id', protect, requireRole('admin', 'hospital_officer'
       try {
         fs.unlinkSync(filePath);
       } catch (e) {
-        console.warn('Could not delete file:', e.message);
+        console.error('Could not delete patient document file:', e);
+        return res.status(500).json({ success: false, message: 'Could not delete the uploaded file. The document record was retained.' });
       }
     }
 
@@ -306,11 +334,30 @@ router.put('/profile', protect, requireRole('admin', 'hospital_officer'), async 
   try {
     const { name, location, profilePhoto } = req.body;
     const update = {};
-    if (name) update.name = name;
-    if (location) update.location = location;
-    if (profilePhoto) update.profilePhoto = profilePhoto;
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim() || name.trim().length > 120) {
+        return res.status(400).json({ success: false, message: 'Name is required and must be 120 characters or fewer' });
+      }
+      update.name = name.trim();
+    }
+    if (location !== undefined) {
+      if (typeof location !== 'string' || !location.trim() || location.trim().length > 200) {
+        return res.status(400).json({ success: false, message: 'Location is required and must be 200 characters or fewer' });
+      }
+      update.location = location.trim();
+    }
+    if (profilePhoto !== undefined) {
+      if (typeof profilePhoto !== 'string' || profilePhoto.length > 2_000_000) {
+        return res.status(400).json({ success: false, message: 'Profile photo must be text no larger than 2 MB' });
+      }
+      update.profilePhoto = profilePhoto;
+    }
+    if (!Object.keys(update).length) {
+      return res.status(400).json({ success: false, message: 'Provide at least one profile field to update' });
+    }
 
-    const user = await User.findByIdAndUpdate(req.user.id, { $set: update }, { new: true }).select('-password');
+    const user = await User.findByIdAndUpdate(req.user.id, { $set: update }, { new: true, runValidators: true }).select('-password');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     res.json({ success: true, user });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
@@ -348,7 +395,39 @@ router.get('/financial-cases', protect, requireRole('admin', 'hospital_officer')
 // POST /api/admin/financial-cases
 router.post('/financial-cases', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
-    const financialCase = await FinancialCase.create(req.body);
+    const { patientName, patientId, age, location, diagnosis, verifyingHospital, verifiedByDoctor, targetAmount, description } = req.body;
+    if (typeof patientName !== 'string' || !patientName.trim() || patientName.trim().length > 120) {
+      return res.status(400).json({ success: false, message: 'Patient name is required and must be 120 characters or fewer' });
+    }
+    if (typeof diagnosis !== 'string' || !diagnosis.trim() || diagnosis.trim().length > 500) {
+      return res.status(400).json({ success: false, message: 'Diagnosis is required and must be 500 characters or fewer' });
+    }
+    const parsedTarget = Number(targetAmount);
+    if (!Number.isFinite(parsedTarget) || parsedTarget <= 0) {
+      return res.status(400).json({ success: false, message: 'Target amount must be a positive number' });
+    }
+    const optionalText = { patientId, location, verifyingHospital, verifiedByDoctor, description };
+    for (const [field, value] of Object.entries(optionalText)) {
+      const maxLength = field === 'description' ? 5000 : 200;
+      if (value !== undefined && (typeof value !== 'string' || value.length > maxLength)) {
+        return res.status(400).json({ success: false, message: `${field} must be text and ${maxLength} characters or fewer` });
+      }
+    }
+    const parsedAge = age === undefined || age === '' ? undefined : Number(age);
+    if (parsedAge !== undefined && (!Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120)) {
+      return res.status(400).json({ success: false, message: 'Age must be a whole number between 1 and 120' });
+    }
+    const financialCase = await FinancialCase.create({
+      patientName: patientName.trim(),
+      patientId: patientId?.trim() || undefined,
+      age: parsedAge,
+      location: location?.trim() || undefined,
+      diagnosis: diagnosis.trim(),
+      verifyingHospital: verifyingHospital?.trim() || undefined,
+      verifiedByDoctor: verifiedByDoctor?.trim() || undefined,
+      targetAmount: parsedTarget,
+      description: description?.trim() || undefined,
+    });
     res.status(201).json({ success: true, case: financialCase });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
@@ -755,12 +834,15 @@ router.put('/queue/reorder', protect, requireRole('admin', 'hospital_officer'), 
     }
 
     const updatedQueue = await Queue.find().sort({ estimatedTime: 1 });
-    await Appointment.bulkWrite(updatedQueue.filter((entry) => entry.appointmentId).map((entry) => ({
+    const appointmentUpdates = updatedQueue.filter((entry) => entry.appointmentId).map((entry) => ({
       updateOne: {
         filter: { appointmentId: entry.appointmentId },
         update: { $set: { estimatedTime: entry.estimatedTime } },
       },
-    })));
+    }));
+    if (appointmentUpdates.length > 0) {
+      await Appointment.bulkWrite(appointmentUpdates);
+    }
     res.json({ success: true, queue: updatedQueue });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -771,6 +853,9 @@ router.put('/queue/reorder', protect, requireRole('admin', 'hospital_officer'), 
 router.put('/queue/:token/status', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
     const { status } = req.body;
+    if (!['Scheduled', 'Waiting', 'In Progress', 'Completed', 'No Show', 'Cancelled'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Select a valid queue status' });
+    }
     const item = await Queue.findOneAndUpdate(
       { token: req.params.token },
       { $set: { status } },
@@ -796,9 +881,12 @@ router.delete('/queue/:token', protect, requireRole('admin', 'hospital_officer')
     if (!item) return res.status(404).json({ success: false, message: 'Queue token not found' });
 
     // Sync appointment cancellation
-    if (item.appointmentId || item.token) {
+    const appointmentFilter = item.appointmentId
+      ? { $or: [{ queueToken: item.token }, { appointmentId: item.appointmentId }] }
+      : { queueToken: item.token };
+    if (item.token) {
       await Appointment.findOneAndUpdate(
-        { $or: [{ queueToken: item.token }, { appointmentId: item.appointmentId }] },
+        appointmentFilter,
         { status: 'Cancelled', queueToken: '', adminNote: 'Removed from queue by admin.' }
       );
     }

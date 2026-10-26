@@ -17,10 +17,11 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, currentLang
     setLoading(true);
     try {
       const data = adminMode ? await adminLogin(email, password) : await login(email, password);
-      // Admin portal: only allow hospital_officer or admin roles
-      if (adminMode && data.user.role === 'patient') {
+      if (!data?.token || !data.user) {
+        throw new Error('The server returned an incomplete sign-in response.');
+      }
+      if (adminMode && !['admin', 'hospital_officer'].includes(data.user.role)) {
         setError('Access denied. Staff credentials required.');
-        setLoading(false);
         return;
       }
       localStorage.setItem('healfund_token', data.token);

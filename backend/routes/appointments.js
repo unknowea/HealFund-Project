@@ -86,6 +86,16 @@ const canAccessAppointment = async (user, appointment) => {
   return Boolean(patient?.patientId && appointment.patientId === patient.patientId && appointment.bookedByUserId === patient.patientId);
 };
 
+const allocateQueueToken = async () => {
+  let sequence = (await Queue.countDocuments()) + 25;
+  let token = `C-${String(sequence).padStart(3, '0')}`;
+  while (await Queue.exists({ token })) {
+    sequence += 1;
+    token = `C-${String(sequence).padStart(3, '0')}`;
+  }
+  return token;
+};
+
 // GET /api/appointments — patients see ONLY their own; admins can filter by patientId
 router.get('/', protect, async (req, res) => {
   try {
@@ -279,23 +289,33 @@ router.post('/', protect, (req, res, next) => {
 router.put('/:id/approve', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
     const { department, roomNumber, assignedDoctor, urgency } = req.body;
+    if (department !== undefined && (typeof department !== 'string' || !department.trim() || department.trim().length > 120)) {
+      return res.status(400).json({ success: false, message: 'Department must be 1 to 120 characters' });
+    }
+    if (roomNumber !== undefined && (typeof roomNumber !== 'string' || !roomNumber.trim() || roomNumber.trim().length > 60)) {
+      return res.status(400).json({ success: false, message: 'Room number must be 1 to 60 characters' });
+    }
+    if (assignedDoctor !== undefined && (typeof assignedDoctor !== 'string' || assignedDoctor.trim().length > 120)) {
+      return res.status(400).json({ success: false, message: 'Assigned doctor must be 120 characters or fewer' });
+    }
+    if (urgency !== undefined && !['Routine', 'Low', 'Medium', 'High', 'Emergency'].includes(urgency)) {
+      return res.status(400).json({ success: false, message: 'Select a valid urgency level' });
+    }
     const appt = await findApptById(req.params.id);
     if (!appt) return res.status(404).json({ success: false, message: 'Appointment not found' });
 
-    const targetDept = department || appt.preferredDepartment || 'General Medicine Clinic';
-    const targetRoom = roomNumber || 'Room 101';
-    const targetDoctor = assignedDoctor || 'Dr. M. Worku';
+    const targetDept = department?.trim() || appt.preferredDepartment || 'General Medicine Clinic';
+    const targetRoom = roomNumber?.trim() || 'Room 101';
+    const targetDoctor = assignedDoctor?.trim() || 'Dr. M. Worku';
     const targetUrgency = urgency || appt.urgency || 'Medium';
 
-    let queueToken = appt.queueToken;
-    if (!queueToken) {
-      const queueCount = await Queue.countDocuments();
-      queueToken = `C-${String(queueCount + 25).padStart(3, '0')}`;
+    let queueEntry = appt.appointmentId
+      ? await Queue.findOne({ appointmentId: appt.appointmentId })
+      : null;
+    if (!queueEntry && appt.queueToken) {
+      queueEntry = await Queue.findOne({ token: appt.queueToken, patientId: appt.patientId });
     }
-
-    let queueEntry = await Queue.findOne({
-      $or: [{ token: queueToken }, { appointmentId: appt.appointmentId }],
-    });
+    const queueToken = queueEntry?.token || await allocateQueueToken();
 
     const deptStr = targetDept.includes('Clinic') ? targetDept : `${targetDept} Clinic`;
 
@@ -350,12 +370,18 @@ router.put('/:id/approve', protect, requireRole('admin', 'hospital_officer'), as
 router.put('/:id/reject', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
     const { rejectionReason, adminNote } = req.body;
+    if (typeof rejectionReason !== 'string' || !rejectionReason.trim()) {
+      return res.status(400).json({ success: false, message: 'A rejection reason is required' });
+    }
+    if (rejectionReason.trim().length > 2000 || (adminNote !== undefined && (typeof adminNote !== 'string' || adminNote.length > 2000))) {
+      return res.status(400).json({ success: false, message: 'Rejection reason and admin note must be 2,000 characters or fewer' });
+    }
     const appt = await findApptById(req.params.id);
     if (!appt) return res.status(404).json({ success: false, message: 'Appointment not found' });
 
     appt.status = 'Rejected';
-    appt.rejectionReason = rejectionReason || 'Appointment criteria not met or hospital capacity exceeded.';
-    appt.adminNote = adminNote || appt.rejectionReason;
+    appt.rejectionReason = rejectionReason.trim();
+    appt.adminNote = adminNote?.trim() || appt.rejectionReason;
     appt.reviewedAt = new Date();
 
     if (appt.queueToken) {
@@ -377,18 +403,27 @@ router.put('/:id/reject', protect, requireRole('admin', 'hospital_officer'), asy
 router.put('/:id/request-docs', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
     const { requestedDocuments, adminNote } = req.body;
-    const appt = await findApptById(req.params.id);
-    if (!appt) return res.status(404).json({ success: false, message: 'Appointment not found' });
-
     const docList = Array.isArray(requestedDocuments)
       ? requestedDocuments
       : typeof requestedDocuments === 'string'
-      ? requestedDocuments.split(',').map((s) => s.trim()).filter(Boolean)
-      : ['Additional Supporting Medical Documents'];
+        ? requestedDocuments.split(',').map((item) => item.trim()).filter(Boolean)
+        : [];
+    if (
+      docList.length < 1 ||
+      docList.length > 20 ||
+      docList.some((item) => typeof item !== 'string' || !item.trim() || item.trim().length > 200)
+    ) {
+      return res.status(400).json({ success: false, message: 'Specify between 1 and 20 document names, each 200 characters or fewer' });
+    }
+    if (adminNote !== undefined && (typeof adminNote !== 'string' || adminNote.length > 2000)) {
+      return res.status(400).json({ success: false, message: 'Admin note must be 2,000 characters or fewer' });
+    }
+    const appt = await findApptById(req.params.id);
+    if (!appt) return res.status(404).json({ success: false, message: 'Appointment not found' });
 
     appt.status = 'Additional Documents Required';
-    appt.requestedDocuments = docList;
-    appt.adminNote = adminNote || 'Please upload the requested supporting documents to proceed with approval.';
+    appt.requestedDocuments = docList.map((item) => item.trim());
+    appt.adminNote = adminNote?.trim() || 'Please upload the requested supporting documents to proceed with approval.';
     appt.reviewedAt = new Date();
 
     await appt.save();
@@ -473,12 +508,25 @@ router.post('/:id/upload-additional-docs', protect, async (req, res, next) => {
 // PUT /api/appointments/:id — general update
 router.put('/:id', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
+    const allowedFields = new Set(['adminNote', 'assignedDoctor', 'assignedDepartment', 'assignedRoom', 'urgency']);
+    const updates = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+    const fields = Object.keys(updates);
+    if (!fields.length || fields.some((field) => !allowedFields.has(field))) {
+      return res.status(400).json({ success: false, message: 'Only review notes, assignment details, and urgency may be updated' });
+    }
+    for (const field of ['adminNote', 'assignedDoctor', 'assignedDepartment', 'assignedRoom']) {
+      const maxLength = field === 'adminNote' ? 2000 : 120;
+      if (updates[field] !== undefined && (typeof updates[field] !== 'string' || updates[field].length > maxLength)) {
+        return res.status(400).json({ success: false, message: `${field} must be text and ${maxLength} characters or fewer` });
+      }
+    }
+    if (updates.urgency !== undefined && !['Routine', 'Low', 'Medium', 'High', 'Emergency'].includes(updates.urgency)) {
+      return res.status(400).json({ success: false, message: 'Select a valid urgency level' });
+    }
     const appt = await findApptById(req.params.id);
     if (!appt) return res.status(404).json({ success: false, message: 'Appointment not found' });
 
-    // Protect supportingFiles from being overwritten by a stringified body value
-    const { supportingFiles: _ignored, ...safeBody } = req.body;
-    Object.assign(appt, safeBody);
+    Object.assign(appt, updates);
     await appt.save();
 
     res.json({ success: true, appointment: serializeAppt(appt) });

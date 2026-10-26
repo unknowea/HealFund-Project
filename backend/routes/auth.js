@@ -8,6 +8,7 @@ import { protect } from '../middleware/auth.js';
 import { authLimiter, otpLimiter } from '../middleware/rateLimit.js';
 
 const router = express.Router();
+const ownerEmail = (process.env.OWNER_EMAIL || 'healfund2006@gmail.com').trim().toLowerCase();
 
 const generateToken = (user) =>
   jwt.sign(
@@ -211,7 +212,14 @@ router.post('/admin-login', authLimiter, async (req, res) => {
     }
 
     const { password: _, ...userWithoutPass } = user.toObject();
-    return res.json({ success: true, token: generateToken(user), user: userWithoutPass });
+    return res.json({
+      success: true,
+      token: generateToken(user),
+      user: {
+        ...userWithoutPass,
+        isOwner: user.role === 'admin' && user.email.toLowerCase() === ownerEmail,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

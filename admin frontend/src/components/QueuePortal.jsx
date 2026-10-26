@@ -9,6 +9,7 @@ export default function QueuePortal({ currentLang, currentUser }) {
   const [selectedDept, setSelectedDept] = useState('all');
   const [updatingToken, setUpdatingToken] = useState(null);
   const [notification, setNotification] = useState('');
+  const [error, setError] = useState('');
 
   const isAm = currentLang === 'am';
 
@@ -16,6 +17,7 @@ export default function QueuePortal({ currentLang, currentUser }) {
 
   const fetchQueue = async () => {
     setLoading(true);
+    setError('');
     try {
       const data = await getQueue();
       const items = data.queue || [];
@@ -23,6 +25,7 @@ export default function QueuePortal({ currentLang, currentUser }) {
       if (items.length > 0 && !activeQueueToken) setActiveQueueToken(items[0].token);
     } catch (err) {
       console.error('Fetch queue error:', err.message);
+      setError(err.message || 'Could not load the patient queue.');
     } finally {
       setLoading(false);
     }
@@ -32,7 +35,7 @@ export default function QueuePortal({ currentLang, currentUser }) {
     setUpdatingToken(token);
     try {
       await updateQueueStatus(token, newStatus);
-      setQueueItems(queueItems.map((q) => q.token === token ? { ...q, status: newStatus } : q));
+      setQueueItems((items) => items.map((q) => q.token === token ? { ...q, status: newStatus } : q));
       setNotification(`Token ${token} status updated to "${newStatus}"`);
       setTimeout(() => setNotification(''), 4000);
     } catch (err) {
@@ -43,12 +46,15 @@ export default function QueuePortal({ currentLang, currentUser }) {
   };
 
   const filteredQueue = queueItems.filter((q) => {
-    if (searchToken && !q.token.toLowerCase().includes(searchToken.toLowerCase()) && !q.patientName.toLowerCase().includes(searchToken.toLowerCase())) return false;
-    if (selectedDept !== 'all' && !q.department.toLowerCase().includes(selectedDept.toLowerCase())) return false;
+    if (searchToken && !q.token.toLowerCase().includes(searchToken.toLowerCase()) && !(q.patientName || '').toLowerCase().includes(searchToken.toLowerCase())) return false;
+    if (selectedDept !== 'all' && !(q.department || '').toLowerCase().includes(selectedDept.toLowerCase())) return false;
     return true;
   });
 
   const activeTicket = queueItems.find((q) => q.token === activeQueueToken) || queueItems[0];
+  const nowServing = queueItems.find((q) => q.status === 'In Progress')
+    || queueItems.find((q) => q.status === 'Waiting')
+    || queueItems.find((q) => q.status === 'Scheduled');
 
   const statusColors = { Scheduled: '#078930', Waiting: '#f59e0b', 'In Progress': '#0d5a3d', Completed: '#6b7280', 'No Show': '#da121a' };
 
@@ -68,7 +74,7 @@ export default function QueuePortal({ currentLang, currentUser }) {
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <div style={{ background: 'rgba(255,255,255,0.15)', padding: '12px 20px', borderRadius: '14px', textAlign: 'center' }}>
               <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>Now Serving</span>
-              <h1 style={{ fontSize: '32px', color: '#fff', margin: 0 }}>{queueItems[0]?.token || '—'}</h1>
+              <h1 style={{ fontSize: '32px', color: '#fff', margin: 0 }}>{nowServing?.token || '—'}</h1>
             </div>
             <button className="btn btn-outline" onClick={fetchQueue} style={{ color: '#fff', borderColor: '#fff' }}>
               <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i> Refresh
@@ -80,6 +86,12 @@ export default function QueuePortal({ currentLang, currentUser }) {
       {notification && (
         <div style={{ background: notification.startsWith('❌') ? '#fde8e8' : '#d4edda', color: notification.startsWith('❌') ? '#721c24' : '#155724', padding: '12px 20px', borderRadius: '12px', marginBottom: '16px', fontWeight: 600 }}>
           {notification}
+        </div>
+      )}
+      {error && (
+        <div className="admin-alert admin-alert-error" role="alert">
+          Could not load the patient queue: {error}
+          <button type="button" onClick={fetchQueue}>Retry</button>
         </div>
       )}
 
@@ -168,7 +180,7 @@ export default function QueuePortal({ currentLang, currentUser }) {
 
           {loading ? (
             <div style={{ textAlign: 'center', padding: '30px', color: '#7a8a9e' }}><i className="fas fa-spinner fa-spin" style={{ fontSize: '24px' }}></i></div>
-          ) : filteredQueue.length === 0 ? (
+          ) : error ? null : filteredQueue.length === 0 ? (
             <p style={{ color: '#7a8a9e', textAlign: 'center', padding: '20px' }}>No queue items found.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '500px', overflowY: 'auto' }}>

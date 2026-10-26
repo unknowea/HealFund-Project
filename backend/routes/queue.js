@@ -51,6 +51,9 @@ router.get('/:token', protect, async (req, res) => {
 router.put('/:token/status', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
     const { status } = req.body;
+    if (!['Scheduled', 'Waiting', 'In Progress', 'Completed', 'No Show', 'Cancelled'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Select a valid queue status' });
+    }
     const item = await Queue.findOneAndUpdate(
       { token: req.params.token },
       { $set: { status } },
