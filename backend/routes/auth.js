@@ -6,6 +6,8 @@ import Otp from '../models/Otp.js';
 import { sendOtpEmail } from '../config/mailer.js';
 import { protect } from '../middleware/auth.js';
 import { authLimiter, otpLimiter } from '../middleware/rateLimit.js';
+import Notification from '../models/Notification.js';
+import PushSubscription from '../models/PushSubscription.js';
 
 const router = express.Router();
 const ownerEmail = (process.env.OWNER_EMAIL || 'healfund2006@gmail.com').trim().toLowerCase();
@@ -283,6 +285,10 @@ router.delete('/account', protect, authLimiter, async (req, res) => {
     if (!user) {
       return res.status(404).json({ success: false, message: 'Patient account not found' });
     }
+    await Promise.all([
+      Notification.deleteMany({ userId: user._id }),
+      PushSubscription.deleteMany({ userId: user._id }),
+    ]);
 
     return res.json({
       success: true,

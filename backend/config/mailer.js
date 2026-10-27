@@ -82,6 +82,52 @@ export const sendCustomerReplyEmail = async ({ toEmail, recipientName, category,
   }
 };
 
+export const sendNotificationEmail = async ({ toEmail, recipientName, title, message, url = '/' }) => {
+  const safeName = escapeHtml(recipientName || 'there');
+  const safeTitle = escapeHtml(title);
+  const safeMessage = escapeHtml(message);
+  const frontendUrl = process.env.USER_FRONTEND_URL || 'https://healfund.onrender.com';
+  const safeUrl = escapeHtml(new URL(url, frontendUrl).toString());
+
+  try {
+    const info = await sendEmail({
+      from: formatSender(),
+      to: toEmail,
+      replyTo: senderAddress(),
+      subject: `HealFund update: ${title}`,
+      text: `Hello ${recipientName || 'there'},\n\n${message}\n\nView your HealFund account: ${safeUrl}\n\nHealFund Support`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#243447;line-height:1.6"><h2 style="color:#0d5a3d">HealFund</h2><p>Hello ${safeName},</p><h3>${safeTitle}</h3><p>${safeMessage}</p><p><a href="${safeUrl}" style="display:inline-block;background:#078930;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Open HealFund</a></p><p style="color:#64748b;font-size:12px">You received this message about activity on your HealFund account.</p></div>`,
+    });
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Failed to send patient notification email:', error);
+    throw new Error('Unable to send the notification email. Check the email configuration and try again.');
+  }
+};
+
+export const sendDonationReceiptEmail = async ({ toEmail, donorName, amount, caseName, transactionReference, paidAt }) => {
+  const safeName = escapeHtml(donorName || 'Supporter');
+  const safeAmount = escapeHtml(Number(amount).toLocaleString('en-ET', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const safeCaseName = escapeHtml(caseName || 'Verified patient case');
+  const safeReference = escapeHtml(transactionReference);
+  const paidDate = new Date(paidAt).toLocaleString('en-GB');
+
+  try {
+    const info = await sendEmail({
+      from: formatSender(),
+      to: toEmail,
+      replyTo: senderAddress(),
+      subject: 'Your HealFund donation receipt',
+      text: `Hello ${donorName || 'Supporter'},\n\nThank you for your confirmed donation of ${safeAmount} ETB supporting ${caseName || 'a verified patient case'}.\nTransaction reference: ${transactionReference}\nConfirmed: ${paidDate}\n\nHealFund Support`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#243447;line-height:1.6"><h2 style="color:#0d5a3d">HealFund donation receipt</h2><p>Hello ${safeName},</p><p>Thank you for your confirmed donation supporting <strong>${safeCaseName}</strong>.</p><table style="border-collapse:collapse;width:100%"><tr><td style="padding:8px;border-bottom:1px solid #ddd">Amount</td><td style="padding:8px;border-bottom:1px solid #ddd"><strong>${safeAmount} ETB</strong></td></tr><tr><td style="padding:8px;border-bottom:1px solid #ddd">Transaction reference</td><td style="padding:8px;border-bottom:1px solid #ddd">${safeReference}</td></tr><tr><td style="padding:8px">Confirmed</td><td style="padding:8px">${escapeHtml(paidDate)}</td></tr></table><p style="color:#64748b;font-size:12px">Keep this email for your records. HealFund Support</p></div>`,
+    });
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('Failed to send donation receipt email:', error);
+    throw new Error('Unable to send the donation receipt email. Check the email configuration and try again.');
+  }
+};
+
 export const sendOtpEmail = async (toEmail, otp, purpose = 'signup') => {
   let purposeTitle = 'Account Verification';
   let purposeDescription = 'Thank you for choosing HealFund. Use the One-Time Password (OTP) below to verify your email address.';

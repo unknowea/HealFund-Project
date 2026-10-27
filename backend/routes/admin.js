@@ -11,6 +11,8 @@ import Hospital from '../models/Hospital.js';
 import Message from '../models/Message.js';
 import PatientDocument from '../models/PatientDocument.js';
 import Queue from '../models/Queue.js';
+import { notifyPatientSafely } from '../services/notifications.js';
+import AdminActivityLog from '../models/AdminActivityLog.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -162,6 +164,7 @@ router.put('/documents/:id/verify', protect, requireRole('admin', 'hospital_offi
     const doc = await PatientDocument.findOne({ documentId: req.params.id });
     if (!doc) return res.status(404).json({ success: false, message: 'Document not found' });
 
+    const previousStatus = doc.status;
     doc.status = status;
     doc.adminNote = adminNote || (
       status === 'Verified'
@@ -214,6 +217,28 @@ router.put('/documents/:id/verify', protect, requireRole('admin', 'hospital_offi
     }
 
     await doc.save();
+
+    if (previousStatus !== status) {
+      const notice = status === 'Verified'
+        ? {
+          title: 'Medical document verified',
+          message: 'The hospital verified one of your medical documents. Sign in to review your file status and any queue details.',
+        }
+        : status === 'Rejected'
+          ? {
+            title: 'Medical document needs attention',
+            message: 'The hospital could not verify one of your medical documents. Sign in to review the feedback.',
+          }
+          : null;
+      if (notice) {
+        await notifyPatientSafely({
+          patientId: doc.patientId,
+          type: 'document',
+          ...notice,
+        });
+      }
+    }
+
     res.json({ success: true, document: serializeDocument(doc), queueToken: generatedToken });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -278,43 +303,21 @@ router.delete('/documents/:id', protect, requireRole('admin', 'hospital_officer'
 // GET /api/admin/activity-log
 router.get('/activity-log', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
   try {
-    const [recentMessages, recentDocs, recentAppointments] = await Promise.all([
-      Message.find().sort({ createdAt: -1 }).limit(5).lean(),
-      PatientDocument.find().sort({ uploadDate: -1 }).limit(5).lean(),
-      Appointment.find().sort({ createdAt: -1 }).limit(5).lean(),
-    ]);
-
-    const entries = [
-      ...recentMessages.map((m) => ({
-        id: m._id.toString(),
-        action: 'Message',
-        detail: `${m.message ? m.message.substring(0, 60) : ''}…`,
-        actor: m.name || 'Unknown',
-        timestamp: m.createdAt,
-      })),
-      ...recentDocs.map((d) => ({
-        id: d._id.toString(),
-        action: 'Document Upload',
-        detail: `${d.originalName || d.filename} — ${d.status}`,
-        actor: d.patientName || 'Patient',
-        timestamp: d.uploadDate || d.createdAt,
-      })),
-      ...recentAppointments.map((a) => ({
-        id: a._id.toString(),
-        action: 'Appointment',
-        detail: `${a.assignedDepartment || a.preferredDepartment || 'General'} — ${a.status || 'Scheduled'}`,
-        actor: a.patientName || 'Patient',
-        timestamp: a.createdAt,
-      })),
-    ];
-
-    // Sort by most recent first and cap at 15 entries
-    entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    const log = entries.slice(0, 15);
-
-    res.json({ success: true, log });
+    const entries = await AdminActivityLog.find()
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+    const log = entries.map((entry) => ({
+      id: String(entry._id),
+      action: entry.action,
+      detail: `${entry.entityType}${entry.entityId ? ` · ${entry.entityId}` : ''} · HTTP ${entry.statusCode}`,
+      actor: `${entry.actorEmail} (${entry.actorRole})`,
+      timestamp: entry.createdAt,
+    }));
+    return res.json({ success: true, log });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('Could not load admin activity log:', err);
+    return res.status(500).json({ success: false, message: 'Could not load admin activity log' });
   }
 });
 

@@ -32,6 +32,9 @@ const handle = async (fetchPromise) => {
 export const login = (email, password) =>
   handle(fetch(`${BASE}/auth/login`, { method: 'POST', headers: headers(), body: JSON.stringify({ email, password }) }));
 
+export const adminLogin = (email, password) =>
+  handle(fetch(`${BASE}/auth/admin-login`, { method: 'POST', headers: headers(), body: JSON.stringify({ email, password }) }));
+
 export const signup = (payload) =>
   handle(fetch(`${BASE}/auth/signup`, { method: 'POST', headers: headers(), body: JSON.stringify(payload) }));
 

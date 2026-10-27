@@ -40,6 +40,40 @@ const handle = async (fetchPromise) => {
   }
 };
 
+const uploadWithProgress = (url, formData, onProgress = () => {}) => new Promise((resolve, reject) => {
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', url);
+  const token = getToken();
+  if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+  xhr.upload.addEventListener('progress', (event) => {
+    if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+  });
+  xhr.addEventListener('load', () => {
+    const contentType = xhr.getResponseHeader('content-type') || '';
+    let data = {};
+    if (contentType.includes('application/json')) {
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        reject(new Error('The server returned an invalid response.'));
+        return;
+      }
+    }
+    if (xhr.status < 200 || xhr.status >= 300) {
+      reject(new Error(data.message || `Request failed (${xhr.status})`));
+      return;
+    }
+    if (!contentType.includes('application/json')) {
+      reject(new Error('Unexpected response format from server. Check backend configuration.'));
+      return;
+    }
+    resolve(data);
+  });
+  xhr.addEventListener('error', () => reject(new Error('Cannot reach the HealFund backend. Please ensure the backend is running.')));
+  xhr.addEventListener('abort', () => reject(new Error('The upload was cancelled.')));
+  xhr.send(formData);
+});
+
 // ─── AUTH ──────────────────────────────────────────────────────────────────────
 export const login = (email, password) =>
   handle(fetch(`${BASE}/auth/login`, { method: 'POST', headers: headers(), body: JSON.stringify({ email, password }) }));
@@ -82,6 +116,13 @@ export const getAppointments = (params = {}) => {
   return handle(fetch(`${BASE}/appointments${q ? '?' + q : ''}`, { headers: headers() }));
 };
 
+export const requestAppointmentCancellation = (appointmentId, reason) =>
+  handle(fetch(`${BASE}/appointments/${encodeURIComponent(appointmentId)}/cancellation-request`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ reason }),
+  }));
+
 export const getAppointmentFileBlob = async (appointmentId, fileId, download = false) => {
   const query = download ? '?download=true' : '';
   const res = await fetch(`${BASE}/appointments/${encodeURIComponent(appointmentId)}/files/${encodeURIComponent(fileId)}${query}`, {
@@ -107,19 +148,11 @@ export const createAppointment = (payload) => {
   return handle(fetch(`${BASE}/appointments`, { method: 'POST', headers: headers(), body: JSON.stringify(payload) }));
 };
 
-export const uploadAdditionalAppointmentDocs = (appointmentId, file) => {
+export const uploadAdditionalAppointmentDocs = (appointmentId, file, onProgress) => {
   const formData = new FormData();
   formData.append('supportingFile', file);
-  return handle(
-    fetch(`${BASE}/appointments/${appointmentId}/upload-additional-docs`, {
-      method: 'POST',
-      headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
-      body: formData,
-    })
-  );
+  return uploadWithProgress(`${BASE}/appointments/${encodeURIComponent(appointmentId)}/upload-additional-docs`, formData, onProgress);
 };
-
-// ─── QUEUE ─────────────────────────────────────────────────────────────────────
 export const getQueue = (params = {}) => {
   const q = new URLSearchParams(params).toString();
   return handle(fetch(`${BASE}/queue${q ? '?' + q : ''}`, { headers: headers() }));
@@ -155,14 +188,37 @@ export const deleteMessage = (id) =>
   handle(fetch(`${BASE}/messages/${encodeURIComponent(id)}`, { method: 'DELETE', headers: headers() }));
 
 // ─── FILE UPLOAD ───────────────────────────────────────────────────────────────
-export const uploadFile = (file) => {
+export const getPatientDocuments = () =>
+  handle(fetch(`${BASE}/files`, { headers: headers() }));
+
+export const getNotifications = () =>
+  handle(fetch(`${BASE}/notifications`, { headers: headers() }));
+
+export const getPushPublicKey = () =>
+  handle(fetch(`${BASE}/notifications/public-key`, { headers: { 'Content-Type': 'application/json' } }));
+
+export const savePushSubscription = (subscription) =>
+  handle(fetch(`${BASE}/notifications/subscriptions`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(subscription),
+  }));
+
+export const removePushSubscription = (endpoint) =>
+  handle(fetch(`${BASE}/notifications/subscriptions`, {
+    method: 'DELETE',
+    headers: headers(),
+    body: JSON.stringify(endpoint ? { endpoint } : {}),
+  }));
+
+export const markNotificationRead = (id) =>
+  handle(fetch(`${BASE}/notifications/${encodeURIComponent(id)}/read`, {
+    method: 'PUT',
+    headers: headers(),
+  }));
+
+export const uploadFile = (file, onProgress) => {
   const formData = new FormData();
   formData.append('medicalFile', file);
-  return handle(
-    fetch(`${BASE}/files/upload`, {
-      method: 'POST',
-      headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : {},
-      body: formData,
-    })
-  );
+  return uploadWithProgress(`${BASE}/files/upload`, formData, onProgress);
 };

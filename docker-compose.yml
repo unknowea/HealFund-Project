@@ -30,6 +30,9 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-}
       USER_FRONTEND_URL: ${USER_FRONTEND_URL:-http://localhost:3000}
       CHAPA_RETURN_URL: ${CHAPA_RETURN_URL:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:HealFundET@gmail.com}
       ADMIN_FRONTEND_URL: http://localhost:3001
     ports:
       - "5000:5000"

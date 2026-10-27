@@ -52,6 +52,26 @@ const handleUpload = (req, res, next) => {
   });
 };
 
+// GET /api/files — patients can see only their own uploaded documents
+router.get('/', protect, requireRole('patient'), async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('patientId').lean();
+    if (!user?.patientId) {
+      return res.status(401).json({ success: false, message: 'Patient account is not available' });
+    }
+
+    const documents = await PatientDocument.find({ patientId: user.patientId })
+      .select('documentId originalName size type category uploadDate status adminNote reviewedAt updatedAt createdAt')
+      .sort({ uploadDate: -1 })
+      .limit(10)
+      .lean();
+    return res.json({ success: true, documents });
+  } catch (err) {
+    console.error('Could not load patient documents:', err);
+    return res.status(500).json({ success: false, message: 'Could not load patient documents' });
+  }
+});
+
 // POST /api/files/upload — patient-only document upload
 router.post('/upload', protect, requireRole('patient'), handleUpload, async (req, res) => {
   if (!req.file)

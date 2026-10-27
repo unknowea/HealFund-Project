@@ -2,6 +2,8 @@ import express from 'express';
 import { randomUUID } from 'crypto';
 import FinancialCase, { getConfirmedAccounting } from '../models/FinancialCase.js';
 import { protect, requireRole } from '../middleware/auth.js';
+import { notifyPatientSafely } from '../services/notifications.js';
+import { sendDonationReceiptEmail } from '../config/mailer.js';
 
 const router = express.Router();
 
@@ -202,6 +204,28 @@ const verifyAndSettleDonation = async (txRef) => {
     [{ $set: { raisedAmount: { $min: ['$raisedAmount', '$targetAmount'] }, status: 'Funded' } }]
   );
   const updatedCase = await FinancialCase.findById(settledCase._id);
+  const donorEmail = donation.donorEmail || donation.email;
+  if (donorEmail) {
+    void sendDonationReceiptEmail({
+        toEmail: donorEmail,
+        donorName: donation.donorName,
+        amount: donation.amount,
+        caseName: financialCase.patientName,
+        transactionReference: txRef,
+        paidAt: donation.paidAt || new Date(),
+      }).catch((error) => {
+      console.error('Could not send confirmed donation receipt:', {
+        transactionReference: txRef,
+        message: error.message,
+      });
+    });
+  }
+  await notifyPatientSafely({
+    patientId: updatedCase?.patientId,
+    type: 'payment',
+    title: 'A donation was confirmed',
+    message: 'A donation supporting your verified assistance case was confirmed. Sign in to view the latest case progress.',
+  });
   return { statusCode: 200, body: { success: true, status: 'Paid', case: serializePublicCase(updatedCase) } };
 };
 

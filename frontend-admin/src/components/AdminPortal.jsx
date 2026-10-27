@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import WhatsAppMessaging from './WhatsAppMessaging';
+import { adminLogin } from '../api.js';
 
 // --- API Helper ---
 const getAuthHeaders = () => {
@@ -35,25 +36,20 @@ function AdminLogin({ onLoginSuccess }) {
     setError('');
     setLoading(true);
     try {
-      const res = await API('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        if (data.user?.role === 'patient') {
-          setError('Access denied. Staff credentials required.');
-          setLoading(false);
-          return;
-        }
-        localStorage.setItem('healfund_token', data.token);
-        localStorage.setItem('healfund_user', JSON.stringify(data.user));
-        onLoginSuccess(data.user);
-      } else {
-        setError(data.message || 'Invalid credentials');
+      const data = await adminLogin(email, password);
+      if (!data.success || !data.token || !data.user) {
+        throw new Error(data.message || 'The server returned an incomplete sign-in response.');
       }
-    } catch {
-      setError('Server unreachable. Make sure the backend is running.');
+      if (!['admin', 'hospital_officer'].includes(data.user.role)) {
+        throw new Error('Access denied. Staff credentials required.');
+      }
+      localStorage.setItem('healfund_token', data.token);
+      localStorage.setItem('healfund_user', JSON.stringify(data.user));
+      onLoginSuccess(data.user);
+    } catch (err) {
+      setError(err instanceof TypeError
+        ? 'Cannot reach the HealFund backend. Please try again.'
+        : err.message || 'Unable to sign in. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -816,6 +812,83 @@ function HospitalsTab() {
 }
 
 // --- Queue Tab ---
+function CancellationRequestsTab() {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+
+  const loadRequests = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await API('/api/appointments');
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || 'Could not load appointment cancellation requests.');
+      setRequests((data.appointments || []).filter((item) => item.cancellationRequest?.status === 'Pending'));
+    } catch (loadError) {
+      setError(loadError.message || 'Could not load appointment cancellation requests.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadRequests(); }, []);
+
+  const reviewRequest = async (appointment, status) => {
+    if (!window.confirm(`${status} the cancellation request for ${appointment.patientName || 'this patient'}?`)) return;
+    try {
+      const appointmentId = appointment.id || appointment.appointmentId || appointment._id;
+      const response = await API(`/api/appointments/${encodeURIComponent(appointmentId)}/cancellation-request`, {
+        method: 'PUT',
+        body: JSON.stringify({ status }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.message || 'Could not review the cancellation request.');
+      setMessage(`Cancellation request ${status.toLowerCase()}.`);
+      await loadRequests();
+    } catch (reviewError) {
+      setError(reviewError.message || 'Could not review the cancellation request.');
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <h3><i className="fas fa-calendar-times"></i> Appointment Cancellation Requests</h3>
+        <button type="button" className="btn btn-outline" onClick={loadRequests}><i className="fas fa-sync-alt"></i> Refresh</button>
+      </div>
+      {message && <div className="admin-alert admin-alert-success" role="status">{message}</div>}
+      {error && <div className="admin-alert admin-alert-error" role="alert">{error}</div>}
+      {loading ? (
+        <div className="admin-loading"><i className="fas fa-spinner fa-spin"></i> Loading cancellation requests…</div>
+      ) : requests.length ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {requests.map((appointment) => (
+            <div key={appointment.id || appointment._id} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
+              <strong>{appointment.patientName || 'Patient'} · {appointment.appointmentId || appointment.id}</strong>
+              <p style={{ color: '#475569', margin: '8px 0' }}>{appointment.cancellationRequest.reason}</p>
+              <small style={{ color: '#64748b' }}>
+                Requested {appointment.cancellationRequest.requestedAt ? fmtDate(appointment.cancellationRequest.requestedAt) : ''}
+              </small>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                <button type="button" className="btn btn-primary" onClick={() => reviewRequest(appointment, 'Approved')}>
+                  <i className="fas fa-check"></i> Approve cancellation
+                </button>
+                <button type="button" className="admin-btn-danger" onClick={() => reviewRequest(appointment, 'Declined')}>
+                  <i className="fas fa-times"></i> Decline request
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p style={{ color: '#64748b' }}>There are no pending cancellation requests.</p>
+      )}
+    </div>
+  );
+}
+
 function QueueTab() {
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1077,7 +1150,8 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
     { id: 'users',     label: 'Users',      icon: 'fas fa-users' },
     { id: 'financial', label: 'Financials', icon: 'fas fa-hand-holding-heart' },
     { id: 'hospitals', label: 'Hospitals',  icon: 'fas fa-hospital' },
-    { id: 'queue',     label: 'Queue',      icon: 'fas fa-list-ol' },
+    { id: 'cancellations', label: 'Cancellations', icon: 'fas fa-calendar-times' },
+    { id: 'queue',      label: 'Queue',      icon: 'fas fa-list-ol' },
     { id: 'messages',  label: 'Messages',   icon: 'fas fa-inbox' },
     { id: 'chat',      label: 'Live Chat',  icon: 'fas fa-comments' },
   ];
@@ -1126,6 +1200,7 @@ export default function AdminPortal({ currentLang, currentUser, activeTab: propA
         {activeTab === 'users'     && <UsersTab />}
         {activeTab === 'financial' && <FinancialTab />}
         {activeTab === 'hospitals' && <HospitalsTab />}
+        {activeTab === 'cancellations' && <CancellationRequestsTab />}
         {activeTab === 'queue'     && <QueueTab />}
         {activeTab === 'messages'  && <MessagesTab />}
         {activeTab === 'chat'      && <WhatsAppMessaging currentLang={currentLang} currentUser={adminUser} isAdmin={true} />}

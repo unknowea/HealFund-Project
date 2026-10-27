@@ -6,10 +6,13 @@ import QueuePortal from './components/QueuePortal';
 import FinancialAssistancePortal from './components/FinancialAssistancePortal';
 import AboutUs from './components/AboutUs';
 import ContactUs from './components/ContactUs';
+import { removePushSubscription } from './api.js';
 
 export default function App() {
   const [activeModule, setActiveModule] = useState(() => (
-    new URLSearchParams(window.location.search).get('payment') === 'return' ? 'financial' : 'home'
+    new URLSearchParams(window.location.search).get('notification') === '1'
+      ? 'dashboard'
+      : new URLSearchParams(window.location.search).get('payment') === 'return' ? 'financial' : 'home'
   ));
   const [currentLang, setCurrentLang] = useState('en');
   const [currentUser, setCurrentUser] = useState(null);
@@ -52,6 +55,19 @@ export default function App() {
   }, []);
 
   const handleLogout = () => {
+    const unsubscribePush = async () => {
+      try {
+        const registration = await navigator.serviceWorker?.getRegistration('/service-worker.js');
+        const subscription = await registration?.pushManager.getSubscription();
+        if (subscription) {
+          await removePushSubscription(subscription.endpoint);
+          await subscription.unsubscribe();
+        }
+      } catch (error) {
+        console.warn('Could not disable browser push during sign out:', error);
+      }
+    };
+    void unsubscribePush();
     localStorage.removeItem('healfund_token');
     localStorage.removeItem('healfund_user');
     localStorage.removeItem('healfund_remember_me');

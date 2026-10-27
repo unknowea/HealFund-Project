@@ -3,6 +3,7 @@ import Queue from '../models/Queue.js';
 import User from '../models/User.js';
 import Appointment from '../models/Appointment.js';
 import { protect, requireRole } from '../middleware/auth.js';
+import { notifyPatientSafely } from '../services/notifications.js';
 
 const router = express.Router();
 
@@ -54,6 +55,9 @@ router.put('/:token/status', protect, requireRole('admin', 'hospital_officer'), 
     if (!['Scheduled', 'Waiting', 'In Progress', 'Completed', 'No Show', 'Cancelled'].includes(status)) {
       return res.status(400).json({ success: false, message: 'Select a valid queue status' });
     }
+    const previousItem = await Queue.findOne({ token: req.params.token });
+    if (!previousItem) return res.status(404).json({ success: false, message: 'Queue token not found' });
+    const previousStatus = previousItem.status;
     const item = await Queue.findOneAndUpdate(
       { token: req.params.token },
       { $set: { status } },
@@ -66,6 +70,22 @@ router.put('/:token/status', protect, requireRole('admin', 'hospital_officer'), 
         { queueToken: item.token },
         { status, reviewedAt: new Date() }
       );
+    }
+    if (previousStatus !== status) {
+      const messages = {
+        Waiting: 'Your hospital queue ticket is waiting. Sign in to view your ticket and instructions.',
+        'In Progress': 'It is your turn in the hospital queue. Please proceed to your assigned room.',
+        Completed: 'Your hospital queue visit has been marked complete.',
+        'No Show': 'The hospital marked your queue ticket as missed. Contact the hospital for next steps.',
+        Cancelled: 'Your hospital queue ticket was cancelled. Contact the hospital if you need help.',
+        Scheduled: 'Your hospital queue ticket has been scheduled.',
+      };
+      await notifyPatientSafely({
+        patientId: item.patientId,
+        type: 'queue',
+        title: 'Queue status update',
+        message: messages[status],
+      });
     }
     res.json({ success: true, item });
   } catch (err) {

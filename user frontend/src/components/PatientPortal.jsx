@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getAppointments, getAppointmentFileBlob, createAppointment, uploadFile, uploadAdditionalAppointmentDocs, sendMessage, updateProfile, getPublicStats } from '../api.js';
+import { getAppointments, getAppointmentFileBlob, createAppointment, getPatientDocuments, getQueue, uploadFile, uploadAdditionalAppointmentDocs, sendMessage, updateProfile, getPublicStats, getNotifications, getPushPublicKey, savePushSubscription, removePushSubscription, markNotificationRead, requestAppointmentCancellation } from '../api.js';
 
 const APPOINTMENT_FILE_EXTENSIONS = new Set([
   'pdf', 'doc', 'docx', 'txt', 'rtf', 'odt', 'jpg', 'jpeg', 'png', 'webp',
@@ -7,6 +7,12 @@ const APPOINTMENT_FILE_EXTENSIONS = new Set([
 ]);
 const MAX_APPOINTMENT_FILES = 10;
 const MAX_APPOINTMENT_FILE_SIZE = 25 * 1024 * 1024;
+
+const decodeVapidKey = (key) => {
+  const padding = '='.repeat((4 - (key.length % 4)) % 4);
+  const binary = window.atob((key + padding).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+};
 
 function GenderChoice({ value, onChange, isAm = false }) {
   return (
@@ -43,6 +49,17 @@ export default function PatientPortal({
   const [appointmentsList, setAppointmentsList] = useState([]);
   const [apptLoading, setApptLoading] = useState(false);
   const [apptError, setApptError] = useState('');
+  const [patientDocuments, setPatientDocuments] = useState([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState('');
+  const [patientQueue, setPatientQueue] = useState([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueError, setQueueError] = useState('');
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsError, setNotificationsError] = useState('');
+  const [notificationActionError, setNotificationActionError] = useState('');
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [fileProgress, setFileProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -159,6 +176,7 @@ export default function PatientPortal({
   const [additionalDocFile, setAdditionalDocFile] = useState(null);
   const [additionalDocError, setAdditionalDocError] = useState('');
   const [additionalDocUploading, setAdditionalDocUploading] = useState(false);
+  const [additionalDocProgress, setAdditionalDocProgress] = useState(0);
 
   // Profile editing state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -248,9 +266,125 @@ export default function PatientPortal({
   };
 
   // Fetch appointments when dashboard/appointments tab opens
+  const fetchPatientDocuments = async () => {
+    setDocumentsLoading(true);
+    setDocumentsError('');
+    try {
+      const data = await getPatientDocuments();
+      if (!data.success || !Array.isArray(data.documents)) {
+        throw new Error(data.message || 'Could not load your medical documents.');
+      }
+      setPatientDocuments(data.documents);
+    } catch (err) {
+      console.error('Could not load dashboard documents:', err);
+      setDocumentsError(err.message || 'Could not load your medical documents.');
+    } finally {
+      setDocumentsLoading(false);
+    }
+  };
+
+  const fetchPatientQueue = async () => {
+    setQueueLoading(true);
+    setQueueError('');
+    try {
+      const data = await getQueue();
+      if (!data.success || !Array.isArray(data.queue)) {
+        throw new Error(data.message || 'Could not load your queue details.');
+      }
+      setPatientQueue(data.queue);
+    } catch (err) {
+      console.error('Could not load dashboard queue:', err);
+      setQueueError(err.message || 'Could not load your queue details.');
+    } finally {
+      setQueueLoading(false);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    setNotificationsError('');
+    try {
+      const data = await getNotifications();
+      if (!data.success || !Array.isArray(data.notifications)) {
+        throw new Error(data.message || 'Could not load notifications.');
+      }
+      setNotifications(data.notifications);
+    } catch (err) {
+      console.error('Could not load patient notifications:', err);
+      setNotificationsError(err.message || 'Could not load notifications.');
+    }
+  };
+
+  const handlePushNotifications = async () => {
+    setPushBusy(true);
+    setNotificationActionError('');
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        throw new Error('This browser does not support push notifications.');
+      }
+      if (!window.isSecureContext) {
+        throw new Error('Push notifications require HTTPS (or localhost during development).');
+      }
+
+      const registration = await navigator.serviceWorker.register('/service-worker.js');
+      if (pushEnabled) {
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+          await removePushSubscription(subscription.endpoint);
+          await subscription.unsubscribe();
+        }
+        setPushEnabled(false);
+      } else {
+        const permission = await window.Notification.requestPermission();
+        if (permission !== 'granted') {
+          throw new Error('Notification permission was not granted. You can enable it in your browser settings.');
+        }
+        const { publicKey } = await getPushPublicKey();
+        if (!publicKey) throw new Error('Push notifications are not configured on the HealFund server yet.');
+        const existingSubscription = await registration.pushManager.getSubscription();
+        const subscription = existingSubscription || await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: decodeVapidKey(publicKey),
+        });
+        await savePushSubscription(subscription.toJSON());
+        setPushEnabled(true);
+      }
+    } catch (err) {
+      console.error('Could not update push notification settings:', err);
+      setNotificationActionError(err.message || 'Could not update push notification settings.');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const handleMarkNotificationRead = async (id) => {
+    setNotificationActionError('');
+    try {
+      await markNotificationRead(id);
+      setNotifications((items) => items.map((item) => (
+        item._id === id ? { ...item, readAt: new Date().toISOString() } : item
+      )));
+    } catch (err) {
+      setNotificationActionError(err.message || 'Could not update this notification.');
+    }
+  };
+
   useEffect(() => {
     if ((activeTab === 'appointments' || activeTab === 'dashboard') && currentUser) {
       fetchAppointments();
+    }
+  }, [activeTab, currentUser]);
+
+  useEffect(() => {
+    if (activeTab === 'dashboard' && currentUser) {
+      fetchPatientDocuments();
+      fetchPatientQueue();
+      fetchNotifications();
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistration('/service-worker.js')
+          .then((registration) => registration?.pushManager.getSubscription())
+          .then((subscription) => setPushEnabled(Boolean(subscription)))
+          .catch((err) => console.warn('Could not check browser push settings:', err));
+      }
     }
   }, [activeTab, currentUser]);
 
@@ -307,10 +441,9 @@ export default function PatientPortal({
   const submitFileVerification = async () => {
     if (!uploadedFile || fileUploading) return;
     setFileUploading(true);
-    setFileProgress(30);
+    setFileProgress(0);
     try {
-      setFileProgress(70);
-      const data = await uploadFile(uploadedFile);
+      const data = await uploadFile(uploadedFile, setFileProgress);
       if (!data.success) throw new Error(data.message || 'Could not submit the medical document.');
       setFileProgress(100);
       setUploadStatus('✅ ' + data.message);
@@ -377,12 +510,33 @@ export default function PatientPortal({
     }
   };
 
+  const handleCancellationRequest = async (appointment) => {
+    const reason = window.prompt(isAm ? 'እባክዎ የመሰረዝ ምክንያት ያስገቡ።' : 'Please explain why you need to cancel this appointment.');
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setModalMessage(isAm ? 'እባክዎ የመሰረዝ ምክንያት ያስገቡ።' : 'A cancellation reason is required.');
+      return;
+    }
+    try {
+      const appointmentId = appointment.id || appointment._id;
+      const data = await requestAppointmentCancellation(appointmentId, reason);
+      if (!data.success || !data.appointment) throw new Error(data.message || 'Could not request cancellation.');
+      setAppointmentsList((items) => items.map((item) => (
+        (item.id || item._id) === appointmentId ? data.appointment : item
+      )));
+      setModalMessage(isAm ? 'የመሰረዝ ጥያቄዎ ለሆስፒታሉ ተልኳል።' : 'Your cancellation request was sent to the hospital for review.');
+    } catch (error) {
+      setModalMessage(isAm ? `ጥያቄውን መላክ አልተቻለም፦ ${error.message}` : `Could not request cancellation: ${error.message}`);
+    }
+  };
+
   const handleUploadAdditionalDoc = async (appointmentId) => {
     if (!additionalDocFile) return;
     setAdditionalDocUploading(true);
+    setAdditionalDocProgress(0);
     setAdditionalDocError('');
     try {
-      const res = await uploadAdditionalAppointmentDocs(appointmentId, additionalDocFile);
+      const res = await uploadAdditionalAppointmentDocs(appointmentId, additionalDocFile, setAdditionalDocProgress);
       if (!res.success || !res.appointment) {
         throw new Error(res.message || 'Could not upload the requested document.');
       }
@@ -445,6 +599,43 @@ export default function PatientPortal({
         : `Could not send your request: ${err.message}`);
     }
   };
+
+  const activeQueueTicket = patientQueue.find((ticket) => ticket.status === 'In Progress')
+    || patientQueue.find((ticket) => ['Scheduled', 'Waiting'].includes(ticket.status));
+  const activeAppointmentCount = appointmentsList.filter((appointment) => (
+    !['Completed', 'Rejected', 'Cancelled'].includes(appointment.status)
+  )).length;
+  const upcomingAppointment = appointmentsList
+    .filter((appointment) => ['Approved', 'Confirmed'].includes(appointment.status))
+    .map((appointment) => ({
+      appointment,
+      date: new Date(appointment.estimatedTime || appointment.datetime),
+    }))
+    .filter(({ date }) => !Number.isNaN(date.getTime()) && date.getTime() >= Date.now())
+    .sort((a, b) => a.date - b.date)[0];
+  const recentActivity = [
+    ...appointmentsList.map((appointment) => ({
+      id: `appointment-${appointment.id || appointment._id}`,
+      title: isAm ? 'የቀጠሮ ጥያቄ' : 'Appointment request',
+      detail: appointment.disease,
+      status: appointment.status,
+      date: new Date(appointment.updatedAt || appointment.requestedAt || appointment.createdAt),
+    })),
+    ...patientDocuments.map((file) => ({
+      id: `document-${file.documentId || file._id}`,
+      title: file.originalName,
+      detail: isAm ? 'የሕክምና ሰነድ' : 'Medical document',
+      status: file.status,
+      date: new Date(file.reviewedAt || file.updatedAt || file.uploadDate || file.createdAt),
+    })),
+  ]
+    .filter((activity) => !Number.isNaN(activity.date.getTime()))
+    .sort((a, b) => b.date - a.date)
+    .slice(0, 5);
+  const formatDashboardDate = (date) => date.toLocaleString(isAm ? 'am-ET' : undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
 
   return (
     <div>
@@ -513,26 +704,203 @@ export default function PatientPortal({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div className="card">
-              <div className="card-header"><h3><i className="fas fa-stethoscope"></i> {isAm ? 'ፋይል እና ቀጠሮ' : 'File & Appointment'}</h3></div>
+              <div className="card-header">
+                <h3><i className="fas fa-stethoscope"></i> {isAm ? 'የቀጠሮ ማጠቃለያ' : 'Appointment Summary'}</h3>
+                <span className="badge" style={{ background: '#e8f5e9', color: '#146c38', padding: '4px 10px' }}>
+                  {activeAppointmentCount} {isAm ? 'ንቁ' : 'active'}
+                </span>
+              </div>
               <p style={{ color: '#4a5a6e', fontSize: '14px', marginBottom: '16px' }}>
-                {apptLoading ? 'Loading appointments...' : appointmentsList.length > 0
-                  ? (() => {
-                    const scheduled = appointmentsList.find((appointment) => appointment.estimatedTime || appointment.datetime);
-                    return scheduled
-                      ? `${isAm ? 'ቀጣይ ቀጠሮ' : 'Next appointment'}: ${new Date(scheduled.estimatedTime || scheduled.datetime).toLocaleString()}`
-                      : (isAm ? 'የቀጠሮ ጥያቄ በግምገማ ላይ ነው' : 'Appointment request awaiting hospital review');
-                  })()
-                  : (isAm ? 'ቀጠሮ እስካሁን የለም' : 'No appointments yet')}
+                {apptLoading
+                  ? (isAm ? 'ቀጠሮዎች በመጫን ላይ...' : 'Loading appointments...')
+                  : apptError
+                    ? apptError
+                    : upcomingAppointment
+                      ? `${isAm ? 'ቀጣይ ቀጠሮ' : 'Next appointment'}: ${formatDashboardDate(upcomingAppointment.date)}`
+                      : activeAppointmentCount > 0
+                        ? (isAm ? 'የቀጠሮ ጥያቄዎችዎ ሁኔታ ከታች ይታያል።' : 'Your appointment requests are being reviewed or scheduled.')
+                        : (isAm ? 'ገና ቀጠሮ የለዎትም።' : 'You have no appointment requests yet.')}
               </p>
+              {apptError && <button type="button" className="btn btn-outline" onClick={fetchAppointments} style={{ marginBottom: '12px' }}>{isAm ? 'እንደገና ሞክር' : 'Retry'}</button>}
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <button className="btn btn-primary" onClick={() => setActiveTab('appointments')}><i className="fas fa-calendar-plus"></i> {isAm ? 'ቀጠሮ ይያዙ' : 'Book Appointment'}</button>
                 <button className="btn btn-outline" onClick={() => setActiveTab('files')}><i className="fas fa-upload"></i> {isAm ? 'ፋይል ስቀል' : 'Upload File'}</button>
               </div>
             </div>
             <div className="card">
-              <div className="card-header"><h3><i className="fas fa-hand-holding-heart"></i> {isAm ? 'ፈጣን እርዳታ' : 'Quick Help'}</h3></div>
-              <p style={{ color: '#4a5a6e', fontSize: '14px' }}>{isAm ? 'እርዳታ ይፈልጋሉ?' : 'Need assistance? We\'re here for you.'}</p>
-              <button className="btn btn-success" onClick={() => setActiveTab('help')} style={{ marginTop: '12px' }}><i className="fas fa-paper-plane"></i> {isAm ? 'እርዳታ ያግኙ' : 'Get Help'}</button>
+              <div className="card-header"><h3><i className="fas fa-ticket-alt"></i> {isAm ? 'የተራ ሁኔታ እና ቀጣይ እርምጃ' : 'Queue & Next Step'}</h3></div>
+              {queueLoading ? (
+                <p style={{ color: '#5e6f82' }}>{isAm ? 'የተራ መረጃ በመጫን ላይ...' : 'Loading your queue details...'}</p>
+              ) : queueError ? (
+                <div role="alert" style={{ color: '#a8071a' }}>
+                  <p>{queueError}</p>
+                  <button type="button" className="btn btn-outline" onClick={fetchPatientQueue}>{isAm ? 'እንደገና ሞክር' : 'Retry'}</button>
+                </div>
+              ) : activeQueueTicket ? (
+                <>
+                  <p style={{ color: '#4a5a6e', marginBottom: '8px' }}>
+                    <strong>{activeQueueTicket.token}</strong> · {activeQueueTicket.status}
+                    {activeQueueTicket.department ? ` · ${activeQueueTicket.department}` : ''}
+                    {activeQueueTicket.roomNumber ? ` · ${activeQueueTicket.roomNumber}` : ''}
+                  </p>
+                  <p style={{ color: '#4a5a6e', fontSize: '14px', marginBottom: '14px' }}>
+                    {activeQueueTicket.status === 'In Progress'
+                      ? (isAm ? 'እባክዎ ወደ ተመደበው ክፍል ይሂዱ።' : 'Please proceed to your assigned room.')
+                      : activeQueueTicket.estimatedTime
+                        ? `${isAm ? 'የተገመተ ጊዜ' : 'Estimated time'}: ${formatDashboardDate(new Date(activeQueueTicket.estimatedTime))}`
+                        : (isAm ? 'ሆስፒታሉ ተጨማሪ መመሪያ እስኪሰጥ ይጠብቁ።' : 'Wait for the hospital team’s next instructions.')}
+                  </p>
+                </>
+              ) : (
+                <p style={{ color: '#5e6f82' }}>
+                  {isAm ? 'ለእርስዎ የተመደበ ንቁ የተራ ቁጥር የለም። ቀጠሮዎ ሲፈቀድ እዚህ ይታያል።' : 'No active queue ticket is assigned. An approved appointment will appear here when the hospital assigns one.'}
+                </p>
+              )}
+              <button className="btn btn-outline" onClick={() => setActiveModule('queue')}><i className="fas fa-stream"></i> {isAm ? 'የተራ ገጽን ክፈት' : 'View Live Queue'}</button>
+            </div>
+            <div className="card">
+              <div className="card-header"><h3><i className="fas fa-bell"></i> {isAm ? 'የቀጠሮ ማሳሰቢያ' : 'Appointment Reminder'}</h3></div>
+              {upcomingAppointment ? (
+                <>
+                  <p style={{ color: '#4a5a6e', marginBottom: '8px' }}>
+                    {formatDashboardDate(upcomingAppointment.date)}
+                    {upcomingAppointment.appointment.assignedDepartment ? ` · ${upcomingAppointment.appointment.assignedDepartment}` : ''}
+                    {upcomingAppointment.appointment.assignedRoom ? ` · ${upcomingAppointment.appointment.assignedRoom}` : ''}
+                  </p>
+                  <p style={{ color: '#5e6f82', fontSize: '13px', marginBottom: '14px' }}>
+                    {isAm ? 'እባክዎ በተመደበው ሰዓት ይድረሱ እና አስፈላጊ ሰነዶችዎን ይዘው ይምጡ።' : 'Please arrive at the scheduled time and bring any requested documents.'}
+                  </p>
+                </>
+              ) : (
+                <p style={{ color: '#5e6f82' }}>
+                  {isAm ? 'የተረጋገጠ ቀጠሮ ሲኖር የሰዓት እና የቦታ መረጃ እዚህ ይታያል።' : 'When an appointment is scheduled, its time and location will appear here.'}
+                </p>
+              )}
+              <button className="btn btn-outline" onClick={() => setActiveTab('appointments')}><i className="fas fa-calendar-alt"></i> {isAm ? 'ቀጠሮዎችን ይመልከቱ' : 'View Appointments'}</button>
+            </div>
+            <div className="card">
+              <div className="card-header">
+                <h3><i className="fas fa-file-medical"></i> {isAm ? 'የሕክምና ሰነዶች' : 'Medical Documents'}</h3>
+                <span className="badge" style={{ background: '#e8f5e9', color: '#146c38', padding: '4px 10px' }}>{patientDocuments.length}</span>
+              </div>
+              {documentsLoading ? (
+                <p style={{ color: '#5e6f82' }}>{isAm ? 'ሰነዶች በመጫን ላይ...' : 'Loading documents...'}</p>
+              ) : documentsError ? (
+                <div role="alert" style={{ color: '#a8071a' }}>
+                  <p>{documentsError}</p>
+                  <button type="button" className="btn btn-outline" onClick={fetchPatientDocuments}>{isAm ? 'እንደገና ሞክር' : 'Retry'}</button>
+                </div>
+              ) : patientDocuments.length ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>
+                  {patientDocuments.slice(0, 4).map((file) => (
+                    <div key={file.documentId || file._id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', borderBottom: '1px solid #e8edf2', paddingBottom: '8px' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <strong style={{ display: 'block', overflowWrap: 'anywhere', color: '#0f3b5e' }}>{file.originalName}</strong>
+                        <small style={{ color: '#7a8a9e' }}>{file.uploadDate ? new Date(file.uploadDate).toLocaleDateString() : ''}</small>
+                      </div>
+                      <span className={`status-badge ${file.status === 'Verified' ? 'status-verified' : file.status === 'Rejected' ? 'status-rejected' : 'status-pending'}`}>{file.status}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: '#5e6f82' }}>{isAm ? 'ምንም የተጫነ ሰነድ የለም።' : 'You have not uploaded any medical documents yet.'}</p>
+              )}
+              <button className="btn btn-outline" onClick={() => setActiveTab('files')}><i className="fas fa-folder-open"></i> {isAm ? 'ፋይሎችን ይክፈቱ' : 'Manage Files'}</button>
+            </div>
+            <div className="card">
+              <div className="card-header"><h3><i className="fas fa-history"></i> {isAm ? 'የቅርብ እንቅስቃሴ' : 'Recent Activity'}</h3></div>
+              {recentActivity.length ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {recentActivity.map((activity) => (
+                    <div key={activity.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', borderBottom: '1px solid #e8edf2', paddingBottom: '10px' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <strong style={{ color: '#0f3b5e' }}>{activity.title}</strong>
+                        <div style={{ color: '#5e6f82', fontSize: '13px', overflowWrap: 'anywhere' }}>{activity.detail}</div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <span style={{ color: '#146c38', fontSize: '13px', fontWeight: 600 }}>{activity.status}</span>
+                        <div style={{ color: '#7a8a9e', fontSize: '11px' }}>{activity.date.toLocaleDateString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: '#5e6f82' }}>{isAm ? 'እንቅስቃሴ ሲኖር እዚህ ይታያል።' : 'Your appointment and document updates will appear here.'}</p>
+              )}
+            </div>
+            <div className="card">
+              <div className="card-header">
+                <h3><i className="fas fa-bell"></i> {isAm ? 'ማሳወቂያዎች' : 'Notifications'}</h3>
+                <span className="badge">{notifications.filter((item) => !item.readAt).length} {isAm ? 'አዲስ' : 'unread'}</span>
+              </div>
+              <p style={{ color: '#5e6f82', fontSize: '13px' }}>
+                {isAm
+                  ? 'የድር ማሳወቂያዎች መሳሪያዎ ከበይነመረብ ጋር ሲገናኝ ይደርሳሉ። ያለ ኔትወርክ ማሳወቂያ ማድረስ አይቻልም።'
+                  : 'Browser push can arrive while this site is closed when your device has internet access. It cannot be delivered while the device is offline.'}
+              </p>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                <button className="btn btn-outline" type="button" onClick={handlePushNotifications} disabled={pushBusy}>
+                  <i className={`fas ${pushEnabled ? 'fa-bell-slash' : 'fa-bell'}`}></i>
+                  {pushBusy
+                    ? (isAm ? 'በመጫን ላይ...' : 'Please wait...')
+                    : pushEnabled
+                      ? (isAm ? 'የድር ማሳወቂያዎችን አጥፋ' : 'Disable browser push')
+                      : (isAm ? 'የድር ማሳወቂያዎችን አንቃ' : 'Enable browser push')}
+                </button>
+                <button className="btn btn-outline" type="button" onClick={fetchNotifications}>
+                  <i className="fas fa-sync-alt"></i> {isAm ? 'አድስ' : 'Refresh'}
+                </button>
+              </div>
+              {notificationActionError && <p role="alert" style={{ color: '#a8071a' }}>{notificationActionError}</p>}
+              {notificationsError ? (
+                <div role="alert" style={{ color: '#a8071a' }}>
+                  <p>{notificationsError}</p>
+                  <button type="button" className="btn btn-outline" onClick={fetchNotifications}>{isAm ? 'እንደገና ሞክር' : 'Retry'}</button>
+                </div>
+              ) : notifications.length ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {notifications.slice(0, 10).map((notification) => (
+                    <div key={notification._id} style={{ borderBottom: '1px solid #e8edf2', paddingBottom: '10px', opacity: notification.readAt ? 0.72 : 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                        <strong style={{ color: '#0f3b5e' }}>{notification.title}</strong>
+                        {!notification.readAt && (
+                          <button
+                            type="button"
+                            className="btn btn-outline"
+                            onClick={() => handleMarkNotificationRead(notification._id)}
+                            style={{ fontSize: '12px', padding: '4px 8px', flexShrink: 0 }}
+                          >
+                            {isAm ? 'እንደተነበበ ምልክት አድርግ' : 'Mark read'}
+                          </button>
+                        )}
+                      </div>
+                      <p style={{ color: '#5e6f82', fontSize: '13px', margin: '6px 0' }}>{notification.message}</p>
+                      <small style={{ color: '#7a8a9e' }}>
+                        {notification.createdAt ? new Date(notification.createdAt).toLocaleString() : ''}
+                        {notification.readAt ? ` · ${isAm ? 'ተነቧል' : 'Read'}` : ''}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: '#5e6f82' }}>{isAm ? 'ምንም ማሳወቂያ የለም።' : 'No notifications yet.'}</p>
+              )}
+              <p style={{ color: '#7a8a9e', fontSize: '12px', marginTop: '12px' }}>
+                {isAm ? 'ኢሜይል ማሳወቂያዎች በኢሜይል አገልግሎቱ ሲዋቀር ይሰራሉ።' : 'Email fallback is available when email delivery is configured on the server.'}
+              </p>
+            </div>
+            <div className="card">
+              <div className="card-header"><h3><i className="fas fa-hand-holding-heart"></i> {isAm ? 'ድጋፍ እና ግንኙነት' : 'Support & Contact'}</h3></div>
+              <p style={{ color: '#4a5a6e', fontSize: '14px', marginBottom: '8px' }}>Zewditu Memorial Hospital</p>
+              <p style={{ color: '#4a5a6e', fontSize: '14px', marginBottom: '8px' }}>
+                <i className="fas fa-phone" style={{ width: '20px', color: '#078930' }}></i>
+                <a href="tel:+251921198350">+251 921 198 350</a>
+              </p>
+              <p style={{ color: '#4a5a6e', fontSize: '14px', marginBottom: '12px' }}>
+                <i className="fas fa-envelope" style={{ width: '20px', color: '#078930' }}></i>
+                <a href="mailto:HealFundET@gmail.com">HealFundET@gmail.com</a>
+              </p>
+              <button className="btn btn-success" onClick={() => setActiveTab('help')}><i className="fas fa-paper-plane"></i> {isAm ? 'ፈጣን እርዳታ ያግኙ' : 'Get Help'}</button>
             </div>
           </div>
         </div>
@@ -648,6 +1016,28 @@ export default function PatientPortal({
                         </div>
                       </div>
 
+                      {apt.cancellationRequest?.status === 'Pending' && (
+                        <div style={{ background: '#fff7ed', color: '#9a3412', borderRadius: '8px', padding: '9px 12px', marginBottom: '12px', fontSize: '13px' }}>
+                          <i className="fas fa-clock"></i> {isAm ? 'የመሰረዝ ጥያቄዎ በሆስፒታሉ እየተገመገመ ነው።' : 'Cancellation request pending hospital review.'}
+                        </div>
+                      )}
+                      {apt.cancellationRequest?.status === 'Declined' && (
+                        <div style={{ background: '#fef2f2', color: '#991b1b', borderRadius: '8px', padding: '9px 12px', marginBottom: '12px', fontSize: '13px' }}>
+                          {isAm ? 'የመሰረዝ ጥያቄ አልተቀበለም።' : 'Cancellation request declined.'}
+                          {apt.cancellationRequest.reviewNote ? ` ${apt.cancellationRequest.reviewNote}` : ''}
+                        </div>
+                      )}
+                      {!['Cancelled', 'Completed', 'Rejected'].includes(apt.status) && apt.cancellationRequest?.status !== 'Pending' && (
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ color: '#a8071a', borderColor: '#fca5a5', marginBottom: '12px' }}
+                          onClick={() => handleCancellationRequest(apt)}
+                        >
+                          <i className="fas fa-calendar-times"></i> {isAm ? 'ቀጠሮ መሰረዝ ጠይቅ' : 'Request Cancellation'}
+                        </button>
+                      )}
+
                       {/* Disease and Details */}
                       <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: '10px', marginBottom: '12px' }}>
                         <div style={{ fontSize: '13px', color: '#334155' }}>
@@ -738,6 +1128,18 @@ export default function PatientPortal({
                             </button>
                           </div>
                           {additionalDocError && <p role="alert" style={{ color: '#b42318', fontSize: '13px', marginBottom: 0 }}>{additionalDocError}</p>}
+                          {additionalDocUploading && (
+                            <div
+                              className="progress-container"
+                              role="progressbar"
+                              aria-label={isAm ? 'የሰነድ ስቀላ ሂደት' : 'Document upload progress'}
+                              aria-valuemin="0"
+                              aria-valuemax="100"
+                              aria-valuenow={additionalDocProgress}
+                            >
+                              <div className="progress-bar-fill" style={{ width: `${additionalDocProgress}%` }}></div>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -1055,9 +1457,9 @@ export default function PatientPortal({
                   style={{ width: '100%', padding: '14px', fontSize: '15px', fontWeight: 700 }}
                 >
                   {bookSubmitting ? (
-                    <><i className="fas fa-spinner fa-spin"></i> {isAm ? 'ጥያቄው እየተላከ ነው...' : 'Submitting Request for Admin Triage...'}</>
+                    <><i className="fas fa-spinner fa-spin"></i> {isAm ? 'ጥያቄው እየተላከ ነው...' : 'Submitting Appointment'}</>
                   ) : (
-                    <><i className="fas fa-paper-plane"></i> {isAm ? 'የቀጠሮ ጥያቄውን ላክ' : 'Submit Appointment Request for Admin Triage'}</>
+                    <><i className="fas fa-paper-plane"></i> {isAm ? 'የቀጠሮ ጥያቄውን ላክ' : 'Submit Appointment Request'}</>
                   )}
                 </button>
               </div>
@@ -1085,7 +1487,11 @@ export default function PatientPortal({
             <input type="file" id="fileInputReact" style={{ display: 'none' }} accept=".pdf,.jpg,.jpeg,.png" onClick={(event) => event.stopPropagation()} onChange={(e) => { handleFileUpload(e.target.files[0]); e.target.value = ''; }} />
           </div>
           {uploadStatus && <div style={{ background: '#f0f5fa', padding: '12px', borderRadius: '10px', marginBottom: '14px', fontSize: '14px' }}>{uploadStatus}</div>}
-          {fileProgress > 0 && <div className="progress-container"><div className="progress-bar-fill" style={{ width: `${fileProgress}%` }}></div></div>}
+          {fileProgress > 0 && (
+            <div className="progress-container" role="progressbar" aria-label={isAm ? 'የፋይል ስቀላ ሂደት' : 'File upload progress'} aria-valuemin="0" aria-valuemax="100" aria-valuenow={fileProgress}>
+              <div className="progress-bar-fill" style={{ width: `${fileProgress}%` }}></div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
             <button className="btn btn-success" onClick={submitFileVerification} disabled={!uploadedFile || fileUploading}><i className="fas fa-paper-plane"></i> {isAm ? 'ለማረጋገጫ አስረክብ' : 'Submit for Verification'}</button>
             <button className="btn btn-outline" onClick={() => { setUploadedFile(null); setUploadStatus(''); setFileProgress(0); }} disabled={fileUploading}><i className="fas fa-times"></i> {isAm ? 'አጥራ' : 'Clear'}</button>

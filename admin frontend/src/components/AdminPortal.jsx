@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { apiUrl } from '../api.js';
+import { adminLogin, apiUrl } from '../api.js';
 
 // --- API Helper ---
 const getAuthHeaders = () => {
@@ -96,26 +96,16 @@ function AdminLogin({ onLoginSuccess }) {
     setError('');
     setLoading(true);
     try {
-      const res = await API('/api/auth/admin-login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        if (!data.token || !data.user) {
-          setError('The server returned an incomplete sign-in response.');
-          return;
-        }
-        if (!['admin', 'hospital_officer'].includes(data.user.role)) {
-          setError('Access denied. Staff credentials required.');
-          return;
-        }
-        localStorage.setItem('healfund_token', data.token);
-        localStorage.setItem('healfund_user', JSON.stringify(data.user));
-        onLoginSuccess(data.user);
-      } else {
-        setError(data.message || 'Invalid credentials');
+      const data = await adminLogin(email, password);
+      if (!data.success || !data.token || !data.user) {
+        throw new Error(data.message || 'The server returned an incomplete sign-in response.');
       }
+      if (!['admin', 'hospital_officer'].includes(data.user.role)) {
+        throw new Error('Access denied. Staff credentials required.');
+      }
+      localStorage.setItem('healfund_token', data.token);
+      localStorage.setItem('healfund_user', JSON.stringify(data.user));
+      onLoginSuccess(data.user);
     } catch (err) {
       setError(err instanceof TypeError
         ? 'Server unreachable. Make sure the backend is running.'
@@ -1238,6 +1228,29 @@ function AppointmentsTab() {
     }
   };
 
+  const reviewCancellationRequest = async (appointment, status) => {
+    const confirmed = window.confirm(
+      status === 'Approved'
+        ? `Approve cancellation request for ${appointment.patientName || 'this patient'}?`
+        : `Decline cancellation request for ${appointment.patientName || 'this patient'}?`
+    );
+    if (!confirmed) return;
+    try {
+      const apptId = appointment.id || appointment.appointmentId || appointment._id;
+      const res = await API(`/api/appointments/${encodeURIComponent(apptId)}/cancellation-request`, {
+        method: 'PUT',
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Could not review cancellation request.');
+      setToast(`Cancellation request ${status.toLowerCase()}.`);
+      setTimeout(() => setToast(''), 4000);
+      load(filter);
+    } catch (err) {
+      setError(err.message || 'Could not review cancellation request.');
+    }
+  };
+
   const submitRequestDocs = async () => {
     if (!selectedAppt) return;
     if (!docListText.trim()) { alert('Please specify the required documents.'); return; }
@@ -1417,6 +1430,9 @@ function AppointmentsTab() {
                     <span className={`status-badge ${a.status === 'Approved' ? 'status-verified' : a.status === 'Rejected' ? 'status-rejected' : 'status-pending'}`} style={{ fontSize: '12px' }}>
                       {a.status === 'Additional Documents Required' ? 'Docs Needed' : a.status}
                     </span>
+                    {a.cancellationRequest?.status === 'Pending' && (
+                      <div style={{ color: '#b45309', fontSize: '11px', fontWeight: 700, marginTop: '5px' }}>Cancellation requested</div>
+                    )}
                   </td>
                   <td style={{ fontSize: '12px' }}>
                     {a.assignedRoom ? (
@@ -1463,6 +1479,28 @@ function AppointmentsTab() {
                       >
                         <i className="fas fa-times"></i>
                       </button>
+                      {a.cancellationRequest?.status === 'Pending' && (
+                        <>
+                          <button
+                            className="btn btn-primary"
+                            type="button"
+                            title="Approve cancellation"
+                            style={{ padding: '4px 8px', fontSize: '12px' }}
+                            onClick={() => reviewCancellationRequest(a, 'Approved')}
+                          >
+                            <i className="fas fa-calendar-check"></i>
+                          </button>
+                          <button
+                            className="admin-btn-danger"
+                            type="button"
+                            title="Decline cancellation"
+                            style={{ padding: '4px 8px', fontSize: '12px' }}
+                            onClick={() => reviewCancellationRequest(a, 'Declined')}
+                          >
+                            <i className="fas fa-ban"></i>
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

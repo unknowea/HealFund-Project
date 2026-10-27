@@ -44,6 +44,13 @@ const appointmentSchema = new mongoose.Schema(
     queueToken: { type: String },
     supportingFiles: { type: [supportingFileSchema], default: [] },
     requestedDocuments: [{ type: String }],
+    cancellationRequest: {
+      requestedAt: Date,
+      reason: { type: String, maxlength: 500 },
+      status: { type: String, enum: ['Pending', 'Approved', 'Declined'] },
+      reviewedAt: Date,
+      reviewNote: { type: String, maxlength: 1000 },
+    },
     adminNote: { type: String },
     rejectionReason: { type: String },
     reviewedAt: { type: Date },

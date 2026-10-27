@@ -10,6 +10,7 @@ import Queue from '../models/Queue.js';
 import PatientDocument from '../models/PatientDocument.js';
 import User from '../models/User.js';
 import { protect, requireRole } from '../middleware/auth.js';
+import { notifyPatientSafely } from '../services/notifications.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -364,6 +365,7 @@ router.put('/:id/approve', protect, requireRole('admin', 'hospital_officer'), as
     }
     const appt = await findApptById(req.params.id);
     if (!appt) return res.status(404).json({ success: false, message: 'Appointment not found' });
+    const shouldNotify = !['Approved', 'Confirmed'].includes(appt.status);
 
     const targetDept = department?.trim() || appt.preferredDepartment || 'General Medicine Clinic';
     const targetRoom = roomNumber?.trim() || 'Room 101';
@@ -417,6 +419,16 @@ router.put('/:id/approve', protect, requireRole('admin', 'hospital_officer'), as
 
     await appt.save();
 
+    if (shouldNotify) {
+      await notifyPatientSafely({
+        userId: appt.bookedByUserId,
+        patientId: appt.patientId,
+        type: 'appointment',
+        title: 'Appointment approved',
+        message: 'Your appointment was approved. Sign in to view the scheduled time and hospital instructions.',
+      });
+    }
+
     res.json({
       success: true,
       appointment: serializeAppt(appt),
@@ -440,6 +452,7 @@ router.put('/:id/reject', protect, requireRole('admin', 'hospital_officer'), asy
     const appt = await findApptById(req.params.id);
     if (!appt) return res.status(404).json({ success: false, message: 'Appointment not found' });
 
+    const shouldNotify = appt.status !== 'Rejected';
     appt.status = 'Rejected';
     appt.rejectionReason = rejectionReason.trim();
     appt.adminNote = adminNote?.trim() || appt.rejectionReason;
@@ -450,6 +463,16 @@ router.put('/:id/reject', protect, requireRole('admin', 'hospital_officer'), asy
     }
 
     await appt.save();
+
+    if (shouldNotify) {
+      await notifyPatientSafely({
+        userId: appt.bookedByUserId,
+        patientId: appt.patientId,
+        type: 'appointment',
+        title: 'Appointment update',
+        message: 'The hospital could not approve this appointment request. Sign in to review the reason and contact support if needed.',
+      });
+    }
 
     res.json({
       success: true,
@@ -482,6 +505,7 @@ router.put('/:id/request-docs', protect, requireRole('admin', 'hospital_officer'
     const appt = await findApptById(req.params.id);
     if (!appt) return res.status(404).json({ success: false, message: 'Appointment not found' });
 
+    const shouldNotify = appt.status !== 'Additional Documents Required';
     appt.status = 'Additional Documents Required';
     appt.requestedDocuments = docList.map((item) => item.trim());
     appt.adminNote = adminNote?.trim() || 'Please upload the requested supporting documents to proceed with approval.';
@@ -489,12 +513,91 @@ router.put('/:id/request-docs', protect, requireRole('admin', 'hospital_officer'
 
     await appt.save();
 
+    if (shouldNotify) {
+      await notifyPatientSafely({
+        userId: appt.bookedByUserId,
+        patientId: appt.patientId,
+        type: 'appointment',
+        title: 'More appointment documents needed',
+        message: 'The hospital requested additional documents for your appointment. Sign in to see what to provide.',
+      });
+    }
+
     res.json({
       success: true,
       appointment: serializeAppt(appt),
     });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+router.post('/:id/cancellation-request', protect, async (req, res) => {
+  try {
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (!reason || reason.length > 500) {
+      return res.status(400).json({ success: false, message: 'Provide a cancellation reason of 1 to 500 characters' });
+    }
+    const appointment = await findApptById(req.params.id);
+    if (!appointment) return res.status(404).json({ success: false, message: 'Appointment not found' });
+    if (!await canAccessAppointment(req.user, appointment)) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+    if (['Cancelled', 'Completed', 'Rejected'].includes(appointment.status)) {
+      return res.status(409).json({ success: false, message: 'This appointment can no longer be cancelled' });
+    }
+    if (appointment.cancellationRequest?.status === 'Pending') {
+      return res.status(409).json({ success: false, message: 'A cancellation request is already being reviewed' });
+    }
+
+    appointment.cancellationRequest = { requestedAt: new Date(), reason, status: 'Pending' };
+    await appointment.save();
+    return res.json({ success: true, appointment: serializeAppt(appointment) });
+  } catch (error) {
+    console.error('Could not submit appointment cancellation request:', error);
+    return res.status(500).json({ success: false, message: 'Could not submit the cancellation request' });
+  }
+});
+
+router.put('/:id/cancellation-request', protect, requireRole('admin', 'hospital_officer'), async (req, res) => {
+  try {
+    const { status, reviewNote } = req.body || {};
+    if (!['Approved', 'Declined'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Select Approved or Declined for the cancellation request' });
+    }
+    if (reviewNote !== undefined && (typeof reviewNote !== 'string' || reviewNote.length > 1000)) {
+      return res.status(400).json({ success: false, message: 'Review note must be 1,000 characters or fewer' });
+    }
+    const appointment = await findApptById(req.params.id);
+    if (!appointment) return res.status(404).json({ success: false, message: 'Appointment not found' });
+    if (appointment.cancellationRequest?.status !== 'Pending') {
+      return res.status(409).json({ success: false, message: 'There is no pending cancellation request to review' });
+    }
+
+    appointment.cancellationRequest.status = status;
+    appointment.cancellationRequest.reviewedAt = new Date();
+    appointment.cancellationRequest.reviewNote = reviewNote?.trim() || '';
+    if (status === 'Approved') {
+      appointment.status = 'Cancelled';
+      if (appointment.queueToken) {
+        await Queue.findOneAndUpdate({ token: appointment.queueToken }, { status: 'Cancelled' });
+      }
+    }
+    await appointment.save();
+
+    await notifyPatientSafely({
+      userId: appointment.bookedByUserId,
+      patientId: appointment.patientId,
+      type: 'appointment',
+      title: status === 'Approved' ? 'Cancellation approved' : 'Cancellation request declined',
+      message: status === 'Approved'
+        ? 'The hospital approved your appointment cancellation request.'
+        : 'The hospital could not approve your cancellation request. Sign in to view the hospital response.',
+    });
+    return res.json({ success: true, appointment: serializeAppt(appointment) });
+  } catch (error) {
+    console.error('Could not review appointment cancellation request:', error);
+    return res.status(500).json({ success: false, message: 'Could not review the cancellation request' });
   }
 });
 

@@ -11,8 +11,10 @@ import appointmentRoutes from './routes/appointments.js';
 import queueRoutes from './routes/queue.js';
 import financialRoutes from './routes/financial.js';
 import fileRoutes from './routes/files.js';
+import notificationRoutes from './routes/notifications.js';
 import messageRoutes from './routes/messages.js';
 import adminRoutes from './routes/admin.js';
+import adminActivityAudit from './middleware/adminActivityAudit.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -51,6 +53,7 @@ app.use(
 // ─── BODY PARSER ───────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '3mb' }));
 app.use(express.urlencoded({ extended: true, limit: '3mb' }));
+app.use(adminActivityAudit);
 
 app.get('/', (req, res) => {
   res.json({ success: true, message: 'HealFund Backend API running', version: '2.0.0' });
@@ -62,6 +65,7 @@ app.use('/api/appointments', appointmentRoutes);
 app.use('/api/queue', queueRoutes);
 app.use('/api/financial-cases', financialRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/admin-messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
