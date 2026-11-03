@@ -22,7 +22,7 @@ The platform provides convenient access to appointment booking, financial aid in
 
 HealFund is an online healthcare access platform that connects patients with appointment services, financial aid resources, verification, and support. It aims to simplify the healthcare journey and help individuals and families find the assistance they need.
 
-## Suggested tagline
+## tagline
 
 > HealFund — Better Healthcare Access. More Hope. A Healthier Future.
 
@@ -77,5 +77,5 @@ Do not use real patient, medical, or payment information in development, screens
 
 | Name | Roles | CTC ID |
 |---|---|---|
-| Beza Abera Tibebu | Patient frontend, backend, admin backend, payment system and deployment | CTC-4297-26 |
+| Beza Abera Tibebu | Patient frontend, backend, admin backend, payment system and deployment |CTC-4297-26 |
 | Bezawit Kibret Kebede | Admin frontend | CTC-2238-26 |
