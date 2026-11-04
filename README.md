@@ -30,6 +30,11 @@ HealFund is an online healthcare access platform that connects patients with app
 
 HealFund is a digital healthcare platform developed to improve access to healthcare services and financial assistance. By bringing appointment booking, patient verification, financial aid information, and support services together in one place, the platform aims to create a more convenient and patient-focused experience. Its mission is to help patients and families navigate healthcare with greater confidence, accessibility, and support.
 
+## Project presentation
+
+- [Watch the HealFund presentation video](Project%20Files/Heal%20Fund%20Video.mp4)
+- [Download the HealFund presentation slides](Project%20Files/HealFund-PPT.pptx)
+
 ## Brand preview
 
 ![HealFund brand preview](./public/og-image.png)
