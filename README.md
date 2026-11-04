@@ -32,8 +32,8 @@ HealFund is a digital healthcare platform developed to improve access to healthc
 
 ## Project presentation
 
-- [Watch the HealFund presentation video](Project%20Files/Heal%20Fund%20Video.mp4)
-- [Download the HealFund presentation slides](Project%20Files/HealFund-PPT.pptx)
+- [Watch the HealFund presentation video](https://drive.google.com/file/d/1zDVQOjptqn0G3GupWRGmOogacnnmlEeA/view?usp=sharing)
+- [Open the HealFund presentation slides](https://docs.google.com/presentation/d/1XuT1JWx6Axrr18rKMRbS9tM78PVLFNdB/edit?usp=sharing&ouid=100479346373940797298&rtpof=true&sd=true)
 
 ## Brand preview
 
