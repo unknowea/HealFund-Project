@@ -66,10 +66,6 @@ Admins and hospital staff can also create patient accounts from the Users tab. T
 
 Development validation has included checking the backend health endpoint, authentication and protected access, patient and admin account workflows, and frontend builds. These checks do not replace ongoing production monitoring or testing with the services configured for a deployment.
 
-## Privacy note
-
-Do not use real patient, medical, or payment information in development, screenshots, or demonstrations. Use fictional test data and keep credentials and environment files private.
-
 ## Team
 
 | Name | Roles | CTC ID |
